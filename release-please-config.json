@@ -4,6 +4,7 @@
     ".": {
       "release-type": "go",
       "package-name": "proxbase",
+      "initial-version": "0.1.0",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
       "include-v-in-tag": true,
