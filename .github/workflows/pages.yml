@@ -1,10 +1,11 @@
 name: Pages
 
-# Publishes the JSON schema at https://proxbase.virtbase.com/schema/.
+# Publishes the JSON schema at https://proxbase.virtbase.com/schema/ and the MCP
+# registry entry at https://proxbase.virtbase.com/server.json.
 on:
   push:
     branches: [main]
-    paths: [schema/**, .github/workflows/pages.yml]
+    paths: [schema/**, server.json, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions: {}
@@ -30,6 +31,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -r schema _site/schema
+          cp server.json _site/server.json
           echo proxbase.virtbase.com > _site/CNAME
           printf '<!doctype html><meta charset="utf-8"><title>Proxbase</title><meta http-equiv="refresh" content="0; url=https://github.com/virtbase/proxbase">\n' > _site/index.html
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

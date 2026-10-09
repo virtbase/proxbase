@@ -1,0 +1,185 @@
+name: Proxbase
+description: Create a Proxmox VE cluster in QEMU/KVM on the runner for integration tests
+author: virtbase
+branding:
+  icon: server
+  color: orange
+
+inputs:
+  version:
+    description: proxbase release to install, e.g. v0.2.0, or "latest"
+    default: latest
+  binary:
+    description: Path to a proxbase binary to use instead of downloading a release
+    default: ""
+  name:
+    description: Cluster name
+    default: ci
+  config:
+    description: Cluster file (YAML); the inputs below override it
+    default: ""
+  nodes:
+    description: Number of nodes
+    default: "1"
+  memory:
+    description: Memory per node, e.g. 4G
+    default: ""
+  data-disks:
+    description: Data disks per node, e.g. 2x32G or none
+    default: ""
+  storage:
+    description: Storage on the data disks (zfs, ceph or none)
+    default: ""
+  pve-version:
+    description: Proxmox VE ISO version, e.g. 9.2
+    default: ""
+  golden:
+    description: Clone nodes from a cached base image (faster with cache)
+    default: "true"
+  cache:
+    description: Cache the ISO and base image with actions/cache
+    default: "true"
+  verify-signature:
+    description: Also verify the release signature with cosign (cosign must be installed)
+    default: "false"
+  github-token:
+    description: Token for the GitHub API (release lookup)
+    default: ${{ github.token }}
+
+outputs:
+  cluster:
+    description: Cluster name
+    value: ${{ inputs.name }}
+  endpoint:
+    description: API endpoint, e.g. https://127.0.0.1:18001/
+    value: ${{ steps.env.outputs.endpoint }}
+  api-token:
+    description: API token (user@realm!id=secret)
+    value: ${{ steps.env.outputs.api-token }}
+  ca-cert:
+    description: Path of the cluster CA certificate
+    value: ${{ steps.env.outputs.ca-cert }}
+  ssh-key:
+    description: Path of the root SSH private key
+    value: ${{ steps.env.outputs.ssh-key }}
+  env-file:
+    description: Shell file exporting PROXMOX_VE_* and PROXBASE_* variables (source it)
+    value: ${{ steps.env.outputs.env-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Enable KVM
+      shell: bash
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+        test -w /dev/kvm || { echo "::error::/dev/kvm is not available on this runner"; exit 1; }
+
+    - name: Install QEMU
+      shell: bash
+      run: |
+        if ! command -v qemu-system-x86_64 >/dev/null || ! command -v qemu-img >/dev/null; then
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils >/dev/null
+        fi
+
+    - name: Install proxbase
+      id: install
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        BINARY: ${{ inputs.binary }}
+        VERIFY: ${{ inputs.verify-signature }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        bindir="$RUNNER_TEMP/proxbase-bin"
+        mkdir -p "$bindir"
+        if [ -n "$BINARY" ]; then
+          install -m 0755 "$BINARY" "$bindir/proxbase"
+        else
+          if [ "$VERSION" = latest ]; then
+            VERSION=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/virtbase/proxbase/releases/latest | jq -r .tag_name)
+          fi
+          arch=$(uname -m); case "$arch" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+          base="https://github.com/virtbase/proxbase/releases/download/$VERSION"
+          archive="proxbase_${VERSION#v}_linux_${arch}.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$archive"
+          curl -fsSLO "$base/checksums.txt"
+          sha256sum --ignore-missing -c checksums.txt
+          if [ "$VERIFY" = true ]; then
+            curl -fsSLO "$base/checksums.txt.sigstore.json"
+            cosign verify-blob --bundle checksums.txt.sigstore.json \
+              --certificate-identity-regexp '^https://github.com/virtbase/proxbase/\.github/workflows/release\.yml@' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+          fi
+          tar -xzf "$archive" -C "$bindir" proxbase
+        fi
+        echo "$bindir" >> "$GITHUB_PATH"
+        "$bindir/proxbase" version
+        echo "version=$("$bindir/proxbase" version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore ISO and base image cache
+      if: inputs.cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/proxbase
+        key: proxbase-${{ runner.os }}-${{ runner.arch }}-${{ steps.install.outputs.version }}-${{ inputs.pve-version }}
+        restore-keys: |
+          proxbase-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Create cluster
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        CONFIG: ${{ inputs.config }}
+        NODES: ${{ inputs.nodes }}
+        MEMORY: ${{ inputs.memory }}
+        DATA_DISKS: ${{ inputs.data-disks }}
+        STORAGE: ${{ inputs.storage }}
+        PVE_VERSION: ${{ inputs.pve-version }}
+        GOLDEN: ${{ inputs.golden }}
+      run: |
+        set -euo pipefail
+        args=(create "$NAME")
+        [ -n "$CONFIG" ] && args+=(-f "$CONFIG")
+        [ -n "$NODES" ] && args+=(--nodes "$NODES")
+        [ -n "$MEMORY" ] && args+=(--memory "$MEMORY")
+        [ -n "$DATA_DISKS" ] && args+=(--data-disks "$DATA_DISKS")
+        [ -n "$STORAGE" ] && args+=(--storage "$STORAGE")
+        [ -n "$PVE_VERSION" ] && args+=(--pve-version "$PVE_VERSION")
+        [ "$GOLDEN" = true ] && args+=(--golden)
+        if ! proxbase "${args[@]}"; then
+          logs="${XDG_DATA_HOME:-$HOME/.local/share}/proxbase/clusters/$NAME/logs"
+          for f in "$logs"/*.log; do
+            [ -f "$f" ] || continue
+            echo "::group::$(basename "$f")"
+            tail -n 100 "$f"
+            echo "::endgroup::"
+          done
+          exit 1
+        fi
+
+    - name: Export credentials
+      id: env
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/proxbase-$NAME"
+        proxbase env "$NAME" --export "$dir"
+        proxbase env "$NAME" --format json > "$dir/env.json"
+        echo "::add-mask::$(jq -r .tokenSecret "$dir/env.json")"
+        echo "::add-mask::$(jq -r .rootPassword "$dir/env.json")"
+        {
+          echo "endpoint=$(jq -r .endpoint "$dir/env.json")"
+          echo "api-token=$(jq -r .apiToken "$dir/env.json")"
+          echo "ca-cert=$dir/pve-root-ca.pem"
+          echo "ssh-key=$dir/id_ed25519"
+          echo "env-file=$dir/env.sh"
+        } >> "$GITHUB_OUTPUT"
+        rm "$dir/env.json"

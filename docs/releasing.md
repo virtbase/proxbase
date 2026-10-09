@@ -11,7 +11,10 @@ Releases are automatic; nobody tags by hand.
    release. The same `Release` workflow then runs GoReleaser, which uploads archives,
    deb/rpm/apk packages, SBOMs, `checksums.txt` with its cosign bundle, pushes the
    amd64 image to GHCR (signed), updates the Homebrew tap and attests build
-   provenance.
+   provenance. Afterwards the major tag (`v0`) is moved to the release for
+   `uses: virtbase/proxbase@v0`.
+4. Optional, manual: update `version` and the image tag in `server.json` and publish
+   it to the MCP registry (see [mcp.md](mcp.md#mcp-registry)).
 
 Local dry run (no signing, no publishing):
 
@@ -24,4 +27,5 @@ The image is built for linux/amd64 only; arm64 binaries and packages are release
 
 Dependency updates come from Renovate (weekly, grouped, actions pinned to commit SHAs).
 Security checks: CodeQL, govulncheck, gitleaks, Trivy (repository and image) and
-OpenSSF Scorecard run on pushes, pull requests and weekly.
+OpenSSF Scorecard run on pushes, pull requests and weekly. The `E2E` workflow creates
+a real cluster through the action nightly and on demand.

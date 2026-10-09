@@ -79,6 +79,7 @@ dockers_v2:
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.licenses: Apache-2.0
+      io.modelcontextprotocol.server.name: io.github.virtbase/proxbase # MCP registry ownership, see server.json
 
 docker_signs:
   - cmd: cosign

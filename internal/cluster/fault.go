@@ -220,8 +220,8 @@ func describe(f state.Fault) string {
 	return f.Kind + " " + f.Node
 }
 
-// faultList describes all active faults.
-func (c *Cluster) faultList() []string {
+// Faults describes all active faults.
+func (c *Cluster) Faults() []string {
 	var out []string
 	for _, f := range c.St.Faults {
 		out = append(out, describe(f))

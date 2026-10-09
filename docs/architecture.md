@@ -12,6 +12,11 @@ flowchart TD
     cli["cli<br/>cobra commands"] --> cluster
     cli --> config
     cli --> network
+    cli --> mcpserver["mcpserver<br/>MCP tools"]
+    mcpserver --> cluster
+    mcpserver --> job["job<br/>detached creates"]
+    cluster --> progress["progress<br/>events, text/JSON sinks"]
+    job --> progress
     cluster["cluster<br/>orchestration"] --> vm
     cluster --> network
     cluster --> storage
@@ -51,7 +56,10 @@ flowchart TD
 | `remote` | SSH to nodes through the forwarded ports |
 | `retry` | Retry with timeout, interval and permanent errors |
 | `golden` | Cached base images and the personalization of cloned nodes |
-| `cluster` | Orchestration: create, lifecycle, nodes, snapshots, faults, status |
+| `cluster` | Orchestration: create, lifecycle, nodes, snapshots, faults, status, exec |
+| `progress` | Progress events and sinks: text, JSON lines, MCP notifications |
+| `job` | Runs a create detached from its caller, with a JSON-lines progress log |
+| `mcpserver` | MCP server (`proxbase mcp`): tools, the schema resource, progress forwarding |
 | `cli` | Commands, flags and output |
 
 Extension points are small interfaces: a new hypervisor implements `vm.Runtime` (and
@@ -89,6 +97,33 @@ sequenceDiagram
 Each step checks first and skips what is done, so a failed create resumes when run
 again. Progress (`installed` per node, phase, errors) is kept in `state.json`.
 
+## Progress and the MCP server
+
+Long operations report through a `progress.Sink` (a function taking an `Event`).
+The CLI passes a text or JSON-lines sink for stderr (`--progress`); the MCP server
+passes one that also forwards events as MCP progress notifications.
+
+```mermaid
+sequenceDiagram
+    participant Agent as MCP client
+    participant MCP as proxbase mcp
+    participant Job as proxbase create --progress json (detached)
+    participant Log as job log (jobs/NAME.jsonl)
+    Agent->>MCP: tools/call cluster_create (progressToken)
+    MCP->>Job: start in its own session
+    loop every second until done or timeoutSeconds
+        Job->>Log: one event per line
+        MCP->>Log: read new lines
+        MCP-->>Agent: notifications/progress
+    end
+    MCP-->>Agent: result (status, or running=true)
+    Agent->>MCP: cluster_wait (if still running)
+```
+
+The create runs as a separate process so it survives client timeouts and restarts
+of the MCP server; everything else (`node_exec`, `cluster_start`, snapshots, faults)
+runs in the server process, guarded by the same cluster lock as the CLI.
+
 ## Nodes
 
 - QEMU/KVM with q35, SeaBIOS and fixed PCI addresses for every device, identical
@@ -118,6 +153,7 @@ again. Progress (`installed` per node, phase, errors) is kept in `state.json`.
 ├── disks/              <node>-root.qcow2, <node>-dataN.qcow2
 ├── run/                pidfiles, QMP/console sockets, switch and NIC sockets
 └── logs/               install, console, QEMU and switch logs
+~/.local/share/proxbase/jobs/  <cluster>.jsonl, .pid, .yaml of creates started over MCP
 ~/.cache/proxbase/iso/     ISOs, SHA256SUMS, extracted installer files
 ~/.cache/proxbase/images/  golden base images (create --golden)
 ```

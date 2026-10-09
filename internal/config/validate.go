@@ -19,6 +19,15 @@ var (
 	minDisks = map[string]int{"single": 1, "mirror": 2, "raid10": 4, "raidz": 3, "raidz2": 4, "raidz3": 5}
 )
 
+// CheckName validates a cluster name. Names become path elements of the state
+// directory, so check names from outside (arguments, tool calls) before use.
+func CheckName(name string) error {
+	if !nameRe.MatchString(name) {
+		return fmt.Errorf("invalid cluster name %q: must match %s", name, nameRe)
+	}
+	return nil
+}
+
 // Validate checks a defaulted config and returns all problems at once.
 func (c *Cluster) Validate() error {
 	var errs []error

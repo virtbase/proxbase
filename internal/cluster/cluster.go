@@ -19,6 +19,7 @@ import (
 	"github.com/virtbase/proxbase/internal/answer"
 	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/network"
+	"github.com/virtbase/proxbase/internal/progress"
 	"github.com/virtbase/proxbase/internal/qemu"
 	"github.com/virtbase/proxbase/internal/state"
 	"github.com/virtbase/proxbase/internal/storage"
@@ -37,15 +38,12 @@ const (
 	TokenUser = "proxbase@pve"
 )
 
-// Logf reports progress.
-type Logf func(format string, a ...any)
-
 // Cluster is one cluster with its configuration, state and secrets.
 type Cluster struct {
-	Dir state.Dir
-	Cfg *config.Cluster
-	St  *state.State
-	Log Logf
+	Dir      state.Dir
+	Cfg      *config.Cluster
+	St       *state.State
+	Progress progress.Sink
 
 	start    time.Time
 	signer   ssh.Signer
@@ -54,9 +52,12 @@ type Cluster struct {
 	net      network.Switch
 }
 
-func newCluster(d state.Dir, cfg *config.Cluster, st *state.State, logf Logf) (*Cluster, error) {
+func newCluster(d state.Dir, cfg *config.Cluster, st *state.State, p progress.Sink) (*Cluster, error) {
+	if p == nil {
+		p = progress.Discard
+	}
 	c := &Cluster{
-		Dir: d, Cfg: cfg, St: st, Log: logf,
+		Dir: d, Cfg: cfg, St: st, Progress: p,
 		start:   time.Now(),
 		runtime: qemu.Runtime{},
 		net:     network.Switch{Dir: d, Cluster: cfg.Name},
@@ -65,7 +66,10 @@ func newCluster(d state.Dir, cfg *config.Cluster, st *state.State, logf Logf) (*
 }
 
 // Open loads an existing cluster.
-func Open(name string, logf Logf) (*Cluster, error) {
+func Open(name string, p progress.Sink) (*Cluster, error) {
+	if err := config.CheckName(name); err != nil {
+		return nil, err
+	}
 	d := state.ForCluster(name)
 	st, err := d.Load()
 	if err != nil {
@@ -75,11 +79,11 @@ func Open(name string, logf Logf) (*Cluster, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", d.Config(), err)
 	}
-	return newCluster(d, cfg, st, logf)
+	return newCluster(d, cfg, st, p)
 }
 
 // initialize creates the directory, secrets and state for a new cluster.
-func initialize(cfg *config.Cluster, logf Logf) (*Cluster, error) {
+func initialize(cfg *config.Cluster, p progress.Sink) (*Cluster, error) {
 	d := state.ForCluster(cfg.Name)
 	if err := d.Init(); err != nil {
 		return nil, err
@@ -101,7 +105,7 @@ func initialize(cfg *config.Cluster, logf Logf) (*Cluster, error) {
 	if err := d.Save(st); err != nil {
 		return nil, err
 	}
-	return newCluster(d, cfg, st, logf)
+	return newCluster(d, cfg, st, p)
 }
 
 // writeKeyPair generates the ed25519 key nodes trust for root logins.
@@ -164,8 +168,17 @@ func (c *Cluster) ConsoleSocket(name string) (string, error) {
 	return "", fmt.Errorf("cluster %s has no node %q", c.Cfg.Name, name)
 }
 
+// step reports progress; a message starting with a node name is attributed to it.
 func (c *Cluster) step(format string, a ...any) {
-	c.Log("[%5.0fs] %s", time.Since(c.start).Seconds(), fmt.Sprintf(format, a...))
+	msg := fmt.Sprintf(format, a...)
+	e := progress.Event{Time: time.Now(), Type: progress.TypeStep, Cluster: c.Cfg.Name, Message: msg, Elapsed: time.Since(c.start).Seconds()}
+	for _, n := range c.St.Nodes {
+		if rest, ok := strings.CutPrefix(msg, n.Name); ok && (rest == "" || rest[0] == ':' || rest[0] == ' ') {
+			e.Node = n.Name
+			break
+		}
+	}
+	c.Progress(e)
 }
 
 func (c *Cluster) save() error { return c.Dir.Save(c.St) }

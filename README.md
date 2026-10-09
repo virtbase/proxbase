@@ -37,7 +37,10 @@ pve3  running  online   10.10.10.13  https://127.0.0.1:18003  127.0.0.1:18103
 - **Fault injection:** power loss, hung nodes, pulled cables, network partitions,
   latency and loss, to test HA, fencing and Ceph recovery.
 - **Ready for automation:** API token and CA export, `proxbase env` for shells, JSON
-  and the bpg/proxmox Terraform provider, `-o json` for scripts.
+  and the bpg/proxmox Terraform provider, `-o json` and `--progress json` for scripts,
+  and a [GitHub Action](docs/ci.md) for CI.
+- **For AI agents:** `proxbase mcp` is an [MCP server](docs/mcp.md): agents create
+  clusters, run commands on nodes, snapshot and inject faults through tools.
 - **Fast:** `--golden` clones nodes from a cached base image: a 3-node cluster in
   about 1.5 minutes, with a unique identity per node.
 - **Declarative:** one YAML file with a JSON schema; every flag overrides a field.
@@ -77,6 +80,18 @@ proxbase snapshot restore lab base && proxbase start lab
 proxbase env lab --format terraform                 # provider block for bpg/proxmox
 proxbase fault partition lab pve3                   # isolate a node, then: fault clear
 proxbase status lab --check                         # exit code for CI and health checks
+claude mcp add proxbase -- proxbase mcp             # let an AI agent drive proxbase
+```
+
+In GitHub Actions:
+
+```yaml
+- id: pve
+  uses: virtbase/proxbase@v0          # KVM, QEMU, cache, create; outputs endpoint, api-token, env-file
+- env: {PVE_ENV: "${{ steps.pve.outputs.env-file }}"}
+  run: . "$PVE_ENV" && go test ./... -tags integration
+- if: always()
+  run: proxbase destroy ci --yes
 ```
 
 A cluster file looks like this (everything has a default):
@@ -103,13 +118,14 @@ storage:
 | [Configuration](docs/configuration.md) | Every field, default and limit |
 | [Networking](docs/networking.md) · [Storage](docs/storage.md) · [Lifecycle](docs/lifecycle.md) | How it works and what to expect |
 | [Fault injection](docs/fault-injection.md) · [Golden images](docs/golden-images.md) | Breaking the cluster on purpose, faster creates |
+| [CI and automation](docs/ci.md) · [MCP server](docs/mcp.md) | GitHub Action, JSON progress, AI agents |
 | [Docker](docs/docker.md) · [CLI reference](docs/cli.md) · [Troubleshooting](docs/troubleshooting.md) | |
 | [Architecture](docs/architecture.md) | Packages, create flow, state on disk |
 | [Examples](examples/) | Ready-to-use cluster files for common setups |
 
 ## Status and limits
 
-Proxbase is young; the file format may change before v0.1.0. It is tested with
+Proxbase is young; the file format may change before v1.0. It is tested with
 Proxmox VE 9.2 on Debian 13 (QEMU 10.0, AMD). Clusters need a Linux host with KVM:
 macOS builds are experimental and Docker Desktop has no `/dev/kvm`. Nodes are
 reachable from the host through forwarded ports on `127.0.0.1`; host-reachable bridge

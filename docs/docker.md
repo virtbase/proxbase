@@ -49,6 +49,9 @@ Limits:
 - A 3-node ZFS cluster needs about 12 GiB RAM and 15 GiB in the volume; Ceph about 18 GiB RAM.
 - The image is built for linux/amd64.
 
+The image also runs the MCP server for AI agents (`… ghcr.io/virtbase/proxbase mcp`);
+see [mcp.md](mcp.md#setup) for the client configuration.
+
 Building the image yourself: `docker build -t proxbase .` (source build) or the
 release image `ghcr.io/virtbase/proxbase`. On networks where the Debian mirror is
 unreliable over IPv6, pass `--build-arg APT_OPTS="-o Acquire::ForceIPv4=true"`.

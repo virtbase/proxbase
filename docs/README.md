@@ -11,6 +11,8 @@
 | [Golden images](golden-images.md) | Faster creates from a cached base image |
 | [Fault injection](fault-injection.md) | Power loss, hangs, pulled cables, partitions, latency and loss |
 | [Docker](docker.md) | Running clusters in a container with Docker Compose |
+| [CI and automation](ci.md) | GitHub Action, other CI systems, JSON progress |
+| [MCP server](mcp.md) | Letting AI agents create, use and break clusters |
 | [CLI reference](cli.md) | All commands and flags |
 | [Troubleshooting](troubleshooting.md) | Logs, common errors and how to resume |
 | [Architecture](architecture.md) | How Proxbase is built, with diagrams |

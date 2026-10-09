@@ -32,10 +32,30 @@ type Status struct {
 	Nodes    []NodeStatus `json:"nodes"`
 }
 
+// Problem explains why a cluster is not fully healthy ("" if it is): healthy
+// means ready, quorate, every node running and online, and Ceph HEALTH_OK.
+func (s *Status) Problem() string {
+	switch {
+	case s.Phase != "ready":
+		return "phase " + s.Phase
+	case s.Quorate == nil || !*s.Quorate:
+		return "not quorate"
+	}
+	for _, n := range s.Nodes {
+		if !n.Running || n.Online == nil || !*n.Online {
+			return n.Name + " not running or offline"
+		}
+	}
+	if s.Ceph != "" && s.Ceph != "HEALTH_OK" {
+		return "ceph " + s.Ceph
+	}
+	return ""
+}
+
 // Status reports processes and, if reachable, membership and storage health via
 // the API token.
 func (c *Cluster) Status(ctx context.Context) *Status {
-	s := &Status{Name: c.Cfg.Name, Phase: string(c.St.Phase), Error: c.St.Error, ISO: c.St.ISO, Switch: c.net.Running(), Duration: c.St.Duration, Faults: c.faultList()}
+	s := &Status{Name: c.Cfg.Name, Phase: string(c.St.Phase), Error: c.St.Error, ISO: c.St.ISO, Switch: c.net.Running(), Duration: c.St.Duration, Faults: c.Faults()}
 	var api *pve.Client
 	for _, n := range c.Cfg.NodeList() {
 		ns := c.St.Node(n.Name)

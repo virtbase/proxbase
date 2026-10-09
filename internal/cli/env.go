@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -22,12 +21,11 @@ func envCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			token, err := c.Token()
+			env, err := c.Env()
 			if err != nil {
-				return fmt.Errorf("cluster %s has no API token yet (create not finished or access.apiToken: false)", c.Cfg.Name)
+				return err
 			}
-			first := c.St.Nodes[0]
-			endpoint := fmt.Sprintf("https://127.0.0.1:%d/", first.UIPort)
+			endpoint, token := env.Endpoint, env.APIToken
 			shell := func(key, ca, prefix string) string {
 				return prefix + fmt.Sprintf("export PROXMOX_VE_ENDPOINT=%q\n", endpoint) +
 					fmt.Sprintf("export PROXMOX_VE_API_TOKEN='%s'\n", token) +
@@ -47,28 +45,8 @@ func envCmd() *cobra.Command {
 				fmt.Print(shell(fmt.Sprintf("%q", c.KeyPath()), fmt.Sprintf("%q", c.CAPath()), ""))
 				return nil
 			case "json":
-				type node struct {
-					Name    string `json:"name"`
-					API     string `json:"api"`
-					SSHHost string `json:"sshHost"`
-					SSHPort int    `json:"sshPort"`
-				}
-				out := struct {
-					Endpoint     string `json:"endpoint"`
-					APIToken     string `json:"apiToken"`
-					TokenID      string `json:"tokenId"`
-					TokenSecret  string `json:"tokenSecret"`
-					CACert       string `json:"caCert"`
-					SSHUser      string `json:"sshUser"`
-					SSHKey       string `json:"sshKey"`
-					RootPassword string `json:"rootPassword"`
-					Nodes        []node `json:"nodes"`
-				}{Endpoint: endpoint, APIToken: token, CACert: c.CAPath(), SSHUser: "root", SSHKey: c.KeyPath(), RootPassword: c.Password()}
-				out.TokenID, out.TokenSecret, _ = strings.Cut(token, "=")
-				for _, n := range c.St.Nodes {
-					out.Nodes = append(out.Nodes, node{Name: n.Name, API: fmt.Sprintf("https://127.0.0.1:%d/", n.UIPort), SSHHost: "127.0.0.1", SSHPort: n.SSHPort})
-				}
-				return printJSON(out)
+				env.RootPassword = c.Password()
+				return printJSON(env)
 			case "terraform":
 				fmt.Printf(`provider "proxmox" {
   endpoint  = %q

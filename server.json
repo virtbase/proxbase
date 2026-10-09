@@ -1,0 +1,62 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.virtbase/proxbase",
+  "title": "Proxbase",
+  "description": "Create, test and break real Proxmox VE clusters in QEMU/KVM on the local host.",
+  "repository": {
+    "url": "https://github.com/virtbase/proxbase",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/virtbase/proxbase/blob/main/docs/mcp.md",
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/virtbase/proxbase:0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--device",
+          "value": "/dev/kvm",
+          "description": "KVM for the node VMs",
+          "isRequired": true
+        },
+        {
+          "type": "named",
+          "name": "--group-add",
+          "value": "{kvm_gid}",
+          "description": "Group that may use /dev/kvm",
+          "isRequired": true,
+          "variables": {
+            "kvm_gid": {
+              "description": "GID of /dev/kvm on the host (stat -c %g /dev/kvm)",
+              "isRequired": true
+            }
+          }
+        },
+        {
+          "type": "named",
+          "name": "--network",
+          "value": "host",
+          "description": "Reach the nodes' web UI, API and SSH ports from the host"
+        },
+        {
+          "type": "named",
+          "name": "--volume",
+          "value": "proxbase:/data",
+          "description": "Keep clusters, ISOs and base images between runs",
+          "isRequired": true
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}
