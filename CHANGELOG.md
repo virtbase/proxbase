@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/virtbase/proxbase/compare/v0.1.0...v0.2.0) (2026-10-09)
+
+
+### Features
+
+* MCP server, progress json and GitHub Action ([a269351](https://github.com/virtbase/proxbase/commit/a2693513cde439b3c73c14db9c28d27e987c5df5))
+* MCP server, progress json and GitHub Action ([39741b3](https://github.com/virtbase/proxbase/commit/39741b38f299b69c0cd353a6ffe7818d06c1d678))
+
+
+### Bug Fixes
+
+* tagging ([92eb927](https://github.com/virtbase/proxbase/commit/92eb92759af6468cf23aea99d5f3a789aa5b47be))
+
 ## 0.1.0 (2026-10-09)
 
 
