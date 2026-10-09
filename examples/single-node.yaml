@@ -1,7 +1,7 @@
 # The smallest useful setup: one node, no data disks, local storage only.
 # Good for trying the web UI, API clients or Ansible roles. About 2.5 minutes.
 #   proxbase create -f examples/single-node.yaml
-apiVersion: proxbase.dev/v1alpha1
+apiVersion: proxbase.virtbase.com/v1alpha1
 kind: Cluster
 name: single
 nodes:

@@ -1,6 +1,6 @@
 # Configuration
 
-A cluster is described by a YAML file (`apiVersion: proxbase.dev/v1alpha1`,
+A cluster is described by a YAML file (`apiVersion: proxbase.virtbase.com/v1alpha1`,
 `kind: Cluster`). Every field has a default, so the smallest file is just a name.
 Flags of `create` and `up` override fields of the file.
 
@@ -11,15 +11,21 @@ proxbase config schema > cluster.schema.json
 proxbase create -f cluster.yaml --nodes 5 --dry-run   # resolved file with all defaults
 ```
 
-The schema enables completion and validation in editors; add
-`# yaml-language-server: $schema=./cluster.schema.json` at the top of the file.
+The schema enables completion and validation in editors (for example VS Code with the
+YAML extension). It is published at
+`https://proxbase.virtbase.com/schema/v1alpha1/cluster.json` and attached to every
+release as `cluster.schema.json`; `proxbase config init` writes the matching first line:
+
+```yaml
+# yaml-language-server: $schema=https://proxbase.virtbase.com/schema/v1alpha1/cluster.json
+```
 When a cluster exists, its resolved file is stored as `cluster.yaml` in the cluster
 directory and is the source of truth for `start`, `node add` and friends.
 
 ## Example
 
 ```yaml
-apiVersion: proxbase.dev/v1alpha1
+apiVersion: proxbase.virtbase.com/v1alpha1
 kind: Cluster
 name: lab
 proxmox:

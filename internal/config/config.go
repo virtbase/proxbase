@@ -1,4 +1,4 @@
-// Package config defines the cluster file format (proxbase.dev/v1alpha1, kind Cluster),
+// Package config defines the cluster file format (proxbase.virtbase.com/v1alpha1, kind Cluster),
 // its defaults and validation.
 package config
 
@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	APIVersion = "proxbase.dev/v1alpha1"
+	APIVersion = "proxbase.virtbase.com/v1alpha1"
 	Kind       = "Cluster"
 
 	DefaultMirror  = "https://enterprise.proxmox.com/iso"
@@ -21,9 +21,9 @@ const (
 )
 
 type Cluster struct {
-	APIVersion string    `yaml:"apiVersion" json:"apiVersion" jsonschema:"enum=proxbase.dev/v1alpha1"`
+	APIVersion string    `yaml:"apiVersion" json:"apiVersion" jsonschema:"enum=proxbase.virtbase.com/v1alpha1"`
 	Kind       string    `yaml:"kind" json:"kind" jsonschema:"enum=Cluster"`
-	Name       string    `yaml:"name" json:"name" jsonschema:"pattern=^[a-z][a-z0-9-]{0,14}$"`
+	Name       string    `yaml:"name" json:"name" jsonschema:"pattern=^[a-z][a-z0-9-]*$,maxLength=15"`
 	Proxmox    Proxmox   `yaml:"proxmox" json:"proxmox,omitempty"`
 	Nodes      Nodes     `yaml:"nodes" json:"nodes,omitempty"`
 	Networks   []Network `yaml:"networks" json:"networks,omitempty"`

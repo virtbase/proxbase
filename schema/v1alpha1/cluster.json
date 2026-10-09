@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxbase.virtbase.com/schema/v1alpha1/cluster.json",
+  "$ref": "#/$defs/Cluster",
+  "$defs": {
+    "Access": {
+      "properties": {
+        "apiToken": {
+          "type": "boolean",
+          "description": "Create API token proxbase@pve!api (default true)"
+        },
+        "portBase": {
+          "type": "integer",
+          "description": "Node n gets UI port portBase+n and SSH port portBase+100+n"
+        },
+        "bindAddress": {
+          "type": "string",
+          "description": "Host address the UI/SSH forwards listen on (default 127.0.0.1; 0.0.0.0 in the container image)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Ceph": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "squid",
+            "tentacle"
+          ]
+        },
+        "osdDisks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Data disk devices (vdb"
+        },
+        "pools": {
+          "items": {
+            "$ref": "#/$defs/CephPool"
+          },
+          "type": "array"
+        },
+        "cephfs": {
+          "type": "boolean",
+          "description": "CephFS storage for ISOs"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "CephPool": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "maximum": 7,
+          "minimum": 1
+        },
+        "minSize": {
+          "type": "integer",
+          "maximum": 7,
+          "minimum": 1
+        },
+        "pgNum": {
+          "type": "integer"
+        },
+        "application": {
+          "type": "string",
+          "enum": [
+            "rbd",
+            "cephfs",
+            "rgw"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Cluster": {
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "enum": [
+            "proxbase.virtbase.com/v1alpha1"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "Cluster"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 15,
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "proxmox": {
+          "$ref": "#/$defs/Proxmox"
+        },
+        "nodes": {
+          "$ref": "#/$defs/Nodes"
+        },
+        "networks": {
+          "items": {
+            "$ref": "#/$defs/Network"
+          },
+          "type": "array"
+        },
+        "storage": {
+          "$ref": "#/$defs/Storage"
+        },
+        "access": {
+          "$ref": "#/$defs/Access"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Disk": {
+      "properties": {
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+[MGT]$"
+        },
+        "filesystem": {
+          "type": "string",
+          "enum": [
+            "zfs",
+            "ext4",
+            "xfs",
+            "btrfs"
+          ],
+          "description": "Root disk only"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Network": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "cidr": {
+          "type": "string",
+          "description": "IPv4 prefix; node n gets .1n. Leave empty for an L2-only network (bridge without node IPs)"
+        },
+        "bridge": {
+          "type": "string"
+        },
+        "vlanAware": {
+          "type": "boolean"
+        },
+        "vlans": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "VLAN IDs or ranges allowed on a VLAN-aware bridge (default 2-4094)"
+        },
+        "mtu": {
+          "type": "integer"
+        },
+        "roles": {
+          "items": {
+            "type": "string",
+            "enum": [
+              "corosync",
+              "ceph-public",
+              "ceph-cluster",
+              "migration"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "NodeSpec": {
+      "properties": {
+        "cpus": {
+          "type": "integer"
+        },
+        "memory": {
+          "type": "string",
+          "pattern": "^[0-9]+[MG]$"
+        },
+        "nested": {
+          "type": "boolean"
+        },
+        "rootDisk": {
+          "$ref": "#/$defs/Disk"
+        },
+        "dataDisks": {
+          "items": {
+            "$ref": "#/$defs/Disk"
+          },
+          "type": "array",
+          "description": "Extra disks; they appear as vdb"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Nodes": {
+      "properties": {
+        "count": {
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 1
+        },
+        "namePattern": {
+          "type": "string",
+          "description": "Node name; {n} is replaced by the node number"
+        },
+        "defaults": {
+          "$ref": "#/$defs/NodeSpec"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/NodeSpec"
+          },
+          "type": "object",
+          "description": "Per-node settings keyed by node name"
+        },
+        "removed": {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array",
+          "description": "Node numbers removed with proxbase node remove; the others keep their addresses"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Proxmox": {
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "mirror": {
+          "type": "string",
+          "description": "Base URL holding the ISOs and SHA256SUMS"
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "keyboard": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "sshKeys": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Extra public keys for root on every node"
+        },
+        "upgrade": {
+          "type": "boolean",
+          "description": "Run apt dist-upgrade on every node before clustering"
+        },
+        "goldenImage": {
+          "type": "boolean",
+          "description": "Clone nodes from a cached installed base image instead of running the installer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Storage": {
+      "properties": {
+        "zfs": {
+          "items": {
+            "$ref": "#/$defs/ZFSPool"
+          },
+          "type": "array"
+        },
+        "ceph": {
+          "$ref": "#/$defs/Ceph"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ZFSPool": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "raid": {
+          "type": "string",
+          "enum": [
+            "single",
+            "mirror",
+            "raid10",
+            "raidz",
+            "raidz2",
+            "raidz3"
+          ]
+        },
+        "disks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Data disk devices (vdb"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    }
+  },
+  "title": "Proxbase cluster"
+}

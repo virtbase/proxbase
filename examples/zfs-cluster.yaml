@@ -2,7 +2,7 @@
 # Pools are per node: replication jobs or live migration with --with-local-disks
 # move guests between them.
 #   proxbase create -f examples/zfs-cluster.yaml
-apiVersion: proxbase.dev/v1alpha1
+apiVersion: proxbase.virtbase.com/v1alpha1
 kind: Cluster
 name: zfs
 nodes:

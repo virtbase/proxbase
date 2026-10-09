@@ -24,3 +24,17 @@ These steps cannot be done from the repository files.
    `analyze`, `govulncheck`, `gitleaks`, `trivy`; block force pushes.
 8. **OpenSSF Scorecard** publishes results automatically (`publish_results: true`);
    add the badge to the README once the first run succeeded.
+9. **Schema site `proxbase.virtbase.com`:** the JSON schema of the cluster file is
+   served at `https://proxbase.virtbase.com/schema/v1alpha1/cluster.json` (editors fetch
+   it through the `# yaml-language-server: $schema=…` line that `proxbase config init`
+   writes). `apiVersion: proxbase.virtbase.com/v1alpha1` is only an identifier and needs
+   nothing.
+   - DNS for `virtbase.com`: `CNAME proxbase.virtbase.com → virtbase.github.io`.
+   - Settings → Pages: source **GitHub Actions**; custom domain `proxbase.virtbase.com`
+     (the `Pages` workflow also writes a `CNAME` file); **Enforce HTTPS** once the
+     certificate is issued.
+   - Optionally verify the domain for the organization (Organization settings → Pages)
+     so no other repository can claim it.
+   - Run the `Pages` workflow once (Actions → Pages → Run workflow), then check
+     `curl -sf https://proxbase.virtbase.com/schema/v1alpha1/cluster.json`.
+   The schema is also attached to every release as `cluster.schema.json`.

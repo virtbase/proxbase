@@ -19,6 +19,9 @@ archives:
 
 checksum:
   name_template: checksums.txt
+  extra_files:
+    - glob: ./schema/v1alpha1/cluster.json
+      name_template: cluster.schema.json
 
 sboms:
   - artifacts: archive
@@ -85,5 +88,8 @@ docker_signs:
 # release-please creates the release and its notes; GoReleaser adds the artifacts.
 release:
   mode: keep-existing
+  extra_files:
+    - glob: ./schema/v1alpha1/cluster.json
+      name_template: cluster.schema.json
 changelog:
   disable: true

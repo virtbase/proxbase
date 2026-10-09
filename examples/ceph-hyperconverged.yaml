@@ -2,7 +2,7 @@
 # CephFS for ISOs, templates, backups and snippets. Ceph traffic on its own network.
 # Needs about 18 GiB RAM on the host. About 5 minutes.
 #   proxbase create -f examples/ceph-hyperconverged.yaml
-apiVersion: proxbase.dev/v1alpha1
+apiVersion: proxbase.virtbase.com/v1alpha1
 kind: Cluster
 name: ceph
 nodes:

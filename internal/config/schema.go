@@ -10,14 +10,14 @@ import (
 func Schema() ([]byte, error) {
 	r := &jsonschema.Reflector{FieldNameTag: "yaml", RequiredFromJSONSchemaTags: true}
 	s := r.Reflect(&Cluster{})
-	s.ID = "https://proxbase.dev/schema/v1alpha1/cluster.json"
+	s.ID = "https://proxbase.virtbase.com/schema/v1alpha1/cluster.json"
 	s.Title = "Proxbase cluster"
 	return json.MarshalIndent(s, "", "  ")
 }
 
 // Example is written by `proxbase config init`.
-const Example = `# yaml-language-server: $schema=https://proxbase.dev/schema/v1alpha1/cluster.json
-apiVersion: proxbase.dev/v1alpha1
+const Example = `# yaml-language-server: $schema=https://proxbase.virtbase.com/schema/v1alpha1/cluster.json
+apiVersion: proxbase.virtbase.com/v1alpha1
 kind: Cluster
 name: lab
 proxmox:

@@ -82,7 +82,7 @@ proxbase status lab --check                         # exit code for CI and healt
 A cluster file looks like this (everything has a default):
 
 ```yaml
-apiVersion: proxbase.dev/v1alpha1
+apiVersion: proxbase.virtbase.com/v1alpha1
 kind: Cluster
 name: lab
 nodes:

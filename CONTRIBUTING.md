@@ -14,6 +14,9 @@ open an issue first so we can agree on the approach.
 The package layout and extension points (node runtime, storage backends, networks) are
 described in [docs/architecture.md](docs/architecture.md).
 
+After changing the cluster file format, run `make schema` to update the published
+schema in `schema/` (a test fails otherwise).
+
 Keep changes focused, add or update unit tests (golden files under `testdata/` are
 updated with `go test ./internal/qemu -update`), and describe what you ran in the PR.
 

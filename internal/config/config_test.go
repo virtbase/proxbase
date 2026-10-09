@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -93,6 +94,21 @@ func TestSchema(t *testing.T) {
 	b, err := Schema()
 	if err != nil || !strings.Contains(string(b), `"namePattern"`) {
 		t.Fatalf("schema: %v", err)
+	}
+}
+
+// The published schema is the committed file; it must match the code.
+func TestSchemaFile(t *testing.T) {
+	b, err := Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.ReadFile("../../schema/v1alpha1/cluster.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(file) != string(b)+"\n" {
+		t.Fatal("schema/v1alpha1/cluster.json is out of date; run make schema")
 	}
 }
 

@@ -5,7 +5,7 @@
 #   storage Ceph public network, jumbo frames
 #   replic Ceph cluster (replication) network, jumbo frames
 #   guests L2 only, VLAN-aware, for guest VLANs 100 and 200-299
-apiVersion: proxbase.dev/v1alpha1
+apiVersion: proxbase.virtbase.com/v1alpha1
 kind: Cluster
 name: net
 nodes:
