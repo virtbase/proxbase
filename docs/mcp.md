@@ -121,10 +121,11 @@ conversation accordingly. Progress and errors are logged to stderr.
 [MCP registry](https://registry.modelcontextprotocol.io) as the container image
 (`io.github.virtbase/proxbase`); the image carries the matching
 `io.modelcontextprotocol.server.name` label and Pages publishes the file at
-`https://proxbase.virtbase.com/server.json`. Publishing is manual after a release:
+`https://proxbase.virtbase.com/server.json`. The `Release` workflow publishes every
+release with `mcp-publisher` and the workflow's OIDC token
+([releasing.md](releasing.md)). By hand, after setting `version` and the image tag in `server.json` to the release:
 
 ```bash
-# set "version" and the image tag in server.json to the release, then:
 mcp-publisher login github      # as a member of the virtbase organization
 mcp-publisher publish
 ```
