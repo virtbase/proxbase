@@ -11,10 +11,20 @@ Releases are automatic; nobody tags by hand.
    release. The same `Release` workflow then runs GoReleaser, which uploads archives,
    deb/rpm/apk packages, SBOMs, `checksums.txt` with its cosign bundle, pushes the
    amd64 image to GHCR (signed), updates the Homebrew tap and attests build
-   provenance. Afterwards the major tag (`v0`) is moved to the release for
-   `uses: virtbase/proxbase@v0`.
-4. Optional, manual: update `version` and the image tag in `server.json` and publish
-   it to the MCP registry (see [mcp.md](mcp.md#mcp-registry)).
+   provenance. Afterwards the workflow
+   - moves the major tag (`v0`) to the release for `uses: virtbase/proxbase@v0`, and
+   - publishes `server.json` with the release's version and image tag to the
+     [MCP registry](mcp.md#mcp-registry) (OIDC login, after the labelled image is
+     pullable). release-please keeps `version` in `server.json` current.
+4. Manual, optional: list the release in the GitHub Marketplace. GitHub offers no
+   API for this: open the release, **Edit**, tick *Publish this Action to the GitHub
+   Marketplace*, **Update release** (two-factor authentication required). The first
+   time, an organization owner accepts the Marketplace Developer Agreement there.
+   Users of `@v0` get new releases through the tag either way; the tick only updates
+   the version shown on the Marketplace page.
+
+To re-run the publishing for an existing release, run the `Release` workflow manually
+with its tag.
 
 Local dry run (no signing, no publishing):
 
