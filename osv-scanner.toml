@@ -1,0 +1,6 @@
+# Known vulnerabilities that do not affect Proxbase (read by OSV-Scanner and the
+# OpenSSF Scorecard). Review when golang.org/x/crypto changes.
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+reason = "Affects golang.org/x/crypto/openpgp, which Proxbase does not import; govulncheck reports it as not called. The package is deprecated and has no fixed version."
