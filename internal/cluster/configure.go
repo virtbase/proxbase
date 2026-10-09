@@ -40,10 +40,44 @@ func (c *Cluster) postInstall(ctx context.Context) error {
 				return fmt.Errorf("%s: dist-upgrade: %w", n.Name, err)
 			}
 			c.step("%s: dist-upgrade in %s: %s", n.Name, time.Since(t0).Round(time.Second), strings.TrimSpace(out))
-			return nil
+			return c.rebootForKernel(gctx, n.Name, s)
 		})
 	}
 	return g.Wait()
+}
+
+// rebootForKernel reboots a node whose newest installed kernel is not running
+// and waits until it is back (new boot ID, SSH up).
+func (c *Cluster) rebootForKernel(ctx context.Context, name string, s *pve.SSH) error {
+	out, err := s.Run(`new=$(ls /boot/vmlinuz-* | sed 's#^/boot/vmlinuz-##' | sort -V | tail -n 1)
+if [ "$new" != "$(uname -r)" ]; then echo "$new $(cat /proc/sys/kernel/random/boot_id)"; fi`)
+	if err != nil || strings.TrimSpace(out) == "" {
+		return err
+	}
+	kernel, bootID, _ := strings.Cut(strings.TrimSpace(out), " ")
+	c.step("%s: rebooting into kernel %s", name, kernel)
+	if _, err := s.Run("systemd-run --on-active=2 systemctl reboot >/dev/null"); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(5 * time.Minute)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+		ns, err := c.ssh(ctx, name)
+		if err != nil {
+			continue
+		}
+		id, err := ns.Run("cat /proc/sys/kernel/random/boot_id; uname -r")
+		ns.Close()
+		if err == nil && !strings.HasPrefix(id, bootID) {
+			c.step("%s: running %s", name, strings.TrimSpace(strings.SplitN(id, "\n", 2)[1]))
+			return nil
+		}
+	}
+	return fmt.Errorf("%s did not come back after the reboot", name)
 }
 
 // links returns the corosync link parameters (link0, link1) of a node.

@@ -91,7 +91,7 @@ fi
 // aptWait waits for apt runs started by PVE itself (pveupdate right after boot).
 const aptWait = `
 for i in $(seq 300); do pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null || break; sleep 2; done
-apt='apt-get -o DPkg::Lock::Timeout=600'
+apt='apt-get -o DPkg::Lock::Timeout=600 -o Acquire::Retries=3'
 `
 
 // upgradeScript brings a node to the newest no-subscription packages.

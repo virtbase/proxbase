@@ -14,9 +14,9 @@ import (
 )
 
 type createOpts struct {
-	file, memory, disk, dataDisks, storage, version, output string
-	nodes, cpus                                             int
-	dryRun                                                  bool
+	file, memory, disk, dataDisks, storage, version, output, bind string
+	nodes, cpus                                                   int
+	dryRun                                                        bool
 }
 
 func createCmd() *cobra.Command {
@@ -52,6 +52,14 @@ func createCmd() *cobra.Command {
 			return printStatus(c.Status(cmd.Context()), o.output)
 		},
 	}
+	o.addFlags(cmd)
+	cmd.Flags().BoolVar(&o.dryRun, "dry-run", false, "print the resolved cluster file and exit")
+	cmd.Flags().StringVarP(&o.output, "output", "o", "table", "output format: table|json (with --dry-run: yaml|json)")
+	return cmd
+}
+
+// addFlags registers the flags that override fields of the cluster file.
+func (o *createOpts) addFlags(cmd *cobra.Command) {
 	f := cmd.Flags()
 	f.StringVarP(&o.file, "file", "f", "", "cluster file (YAML)")
 	f.IntVar(&o.nodes, "nodes", 0, "number of nodes")
@@ -61,9 +69,7 @@ func createCmd() *cobra.Command {
 	f.StringVar(&o.dataDisks, "data-disks", "", "data disks per node: 2x32G, 32G,64G or none")
 	f.StringVar(&o.storage, "storage", "", "data storage on the data disks: zfs, ceph or none")
 	f.StringVar(&o.version, "pve-version", "", "Proxmox VE ISO version, e.g. 9.2 or 9.2-1")
-	f.BoolVar(&o.dryRun, "dry-run", false, "print the resolved cluster file and exit")
-	f.StringVarP(&o.output, "output", "o", "table", "output format: table|json (with --dry-run: yaml|json)")
-	return cmd
+	f.StringVar(&o.bind, "bind-address", "", "address for the UI/SSH forwards (default $PROXBASE_BIND_ADDRESS or 127.0.0.1)")
 }
 
 var multiDiskRe = regexp.MustCompile(`^([0-9]+)x([0-9]+[MGT])$`)
@@ -95,6 +101,11 @@ func (o *createOpts) resolve(cmd *cobra.Command, args []string) (*config.Cluster
 	}
 	if f.Changed("pve-version") {
 		cfg.Proxmox.Version = o.version
+	}
+	if f.Changed("bind-address") {
+		cfg.Access.BindAddress = o.bind
+	} else if env := os.Getenv("PROXBASE_BIND_ADDRESS"); cfg.Access.BindAddress == "" && env != "" {
+		cfg.Access.BindAddress = env
 	}
 	if f.Changed("data-disks") {
 		disks, err := parseDisks(o.dataDisks)

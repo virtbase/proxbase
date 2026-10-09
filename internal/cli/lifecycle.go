@@ -98,8 +98,28 @@ func listCmd() *cobra.Command {
 	return cmd
 }
 
+// healthy explains why a cluster is not fully healthy ("" if it is).
+func healthy(s *cluster.Status) string {
+	switch {
+	case s.Phase != "ready":
+		return "phase " + s.Phase
+	case s.Quorate == nil || !*s.Quorate:
+		return "not quorate"
+	}
+	for _, n := range s.Nodes {
+		if !n.Running || n.Online == nil || !*n.Online {
+			return n.Name + " not running or offline"
+		}
+	}
+	if s.Ceph != "" && s.Ceph != "HEALTH_OK" {
+		return "ceph " + s.Ceph
+	}
+	return ""
+}
+
 func statusCmd() *cobra.Command {
 	var output string
+	var check bool
 	cmd := &cobra.Command{
 		Use:   "status [name]",
 		Short: "Show nodes, quorum and ports",
@@ -109,10 +129,19 @@ func statusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printStatus(c.Status(cmd.Context()), output)
+			s := c.Status(cmd.Context())
+			if check {
+				if why := healthy(s); why != "" {
+					return fmt.Errorf("cluster %s is not healthy: %s", s.Name, why)
+				}
+				fmt.Printf("cluster %s is healthy\n", s.Name)
+				return nil
+			}
+			return printStatus(s, output)
 		},
 	}
 	outputFlag(cmd, &output)
+	cmd.Flags().BoolVar(&check, "check", false, "exit non-zero unless ready, quorate, all nodes online and Ceph HEALTH_OK (for health checks)")
 	return cmd
 }
 

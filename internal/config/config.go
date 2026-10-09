@@ -120,8 +120,9 @@ type ZFSPool struct {
 }
 
 type Access struct {
-	APIToken *bool `yaml:"apiToken" json:"apiToken,omitempty" jsonschema:"description=Create API token proxbase@pve!api (default true)"`
-	PortBase int   `yaml:"portBase" json:"portBase,omitempty" jsonschema:"description=Node n gets UI port portBase+n and SSH port portBase+100+n"`
+	APIToken    *bool  `yaml:"apiToken" json:"apiToken,omitempty" jsonschema:"description=Create API token proxbase@pve!api (default true)"`
+	PortBase    int    `yaml:"portBase" json:"portBase,omitempty" jsonschema:"description=Node n gets UI port portBase+n and SSH port portBase+100+n"`
+	BindAddress string `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty" jsonschema:"description=Host address the UI/SSH forwards listen on (default 127.0.0.1; 0.0.0.0 in the container image)"`
 }
 
 // Node is a fully resolved node.
@@ -243,6 +244,7 @@ func (c *Cluster) SetDefaults() {
 	if c.Access.PortBase == 0 {
 		c.Access.PortBase = 18000
 	}
+	def(&c.Access.BindAddress, "127.0.0.1")
 }
 
 // DataDiskDevice returns the guest device name of data disk i (0-based).
@@ -548,6 +550,9 @@ func (c *Cluster) Validate() error {
 
 	if c.Access.PortBase < 1024 || c.Access.PortBase+100+c.MaxNodeIndex() > 65535 {
 		add("access.portBase: must be between 1024 and %d", 65535-100-c.MaxNodeIndex())
+	}
+	if a, err := netip.ParseAddr(c.Access.BindAddress); err != nil || !a.Is4() {
+		add("access.bindAddress: %q must be an IPv4 address", c.Access.BindAddress)
 	}
 	for _, r := range c.Nodes.Removed {
 		if r < 1 || r > c.MaxNodeIndex() {

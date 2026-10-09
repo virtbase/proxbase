@@ -225,3 +225,15 @@ func TestTwoNodeCephWarning(t *testing.T) {
 		t.Fatalf("warnings: %v", w)
 	}
 }
+
+func TestBindAddress(t *testing.T) {
+	if c := load(t, ""); c.Access.BindAddress != "127.0.0.1" {
+		t.Fatalf("default bind address %q", c.Access.BindAddress)
+	}
+	if err := load(t, "access: {bindAddress: 0.0.0.0}\n").Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := load(t, "access: {bindAddress: localhost}\n").Validate(); err == nil || !strings.Contains(err.Error(), "IPv4 address") {
+		t.Fatalf("want bind address error, got %v", err)
+	}
+}

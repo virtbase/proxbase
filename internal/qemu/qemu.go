@@ -45,6 +45,7 @@ type Machine struct {
 	RootDisk   string
 	DataDisks  []string
 	NATMAC     string
+	Bind       string // host address of the UI/SSH forwards
 	UIPort     int
 	SSHPort    int
 	NICs       []NIC
@@ -78,7 +79,7 @@ func (m *Machine) Args() []string {
 	a = append(a, "-drive", "if=none,id=root,file="+m.RootDisk+",format=qcow2,cache=unsafe,discard=unmap")
 	a = append(a, dev("virtio-blk-pci,drive=root,bus=pcie.0,addr=%#x,bootindex=1", slotRoot)...)
 	a = append(a, dev("qemu-xhci,id=usb,bus=pcie.0,addr=%#x", slotUSB)...)
-	fwd := fmt.Sprintf("hostfwd=tcp:127.0.0.1:%d-10.0.2.15:22,hostfwd=tcp:127.0.0.1:%d-10.0.2.15:8006", m.SSHPort, m.UIPort)
+	fwd := fmt.Sprintf("hostfwd=tcp:%[1]s:%[2]d-10.0.2.15:22,hostfwd=tcp:%[1]s:%[3]d-10.0.2.15:8006", m.Bind, m.SSHPort, m.UIPort)
 	// Nested guests bridged to vmbr0 get DHCP leases from .100 on; the node is .15.
 	a = append(a, "-netdev", "user,id=nat,dhcpstart=10.0.2.100,"+fwd)
 	a = append(a, dev("virtio-net-pci,netdev=nat,mac=%s,bus=pcie.0,addr=%#x", m.NATMAC, slotNAT)...)

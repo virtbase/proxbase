@@ -15,7 +15,7 @@ proxbase destroy lab --yes
 
 ## Status
 
-Early development (milestone M3). Tested on Debian 13 with QEMU 10.0 on an AMD host.
+Early development (milestone M4). Tested on Debian 13 with QEMU 10.0 on an AMD host.
 What works today:
 
 - Unattended install of Proxmox VE 9.2 from the stock ISO (no root, no Docker)
@@ -31,7 +31,9 @@ What works today:
 - `node add` / `node remove`, snapshots of stopped clusters, `ssh`, `console`
 - `create` is resumable: re-run it after a failure
 
-Not yet: bridge networking ([design](docs/bridge-mode.md)), Docker image, macOS. Interfaces and
+- Docker image and Compose example (`proxbase up` runs in the foreground)
+
+Not yet: bridge networking ([design](docs/bridge-mode.md)), release pipeline, macOS. Interfaces and
 the file format may change without notice until v0.1.0.
 
 ## Requirements
@@ -100,6 +102,29 @@ Removed nodes keep their number (`nodes.removed`), so the other nodes keep their
 addresses and ports; `node add` reuses the lowest free number. Snapshots are internal
 qcow2 snapshots of every disk, taken while all nodes are stopped.
 `proxmox.upgrade: true` runs `apt dist-upgrade` on every node before clustering.
+
+## Docker
+
+```bash
+cd examples/compose
+echo "KVM_GID=$(getent group kvm | cut -d: -f3)" > .env
+docker compose up -d                 # builds the image, creates the cluster
+docker compose exec proxbase proxbase status
+docker compose down                  # shuts the nodes down cleanly; -v deletes the cluster
+```
+
+The container runs `proxbase up`: it creates the cluster (or resumes a failed create, or
+starts the existing one from the `/data` volume), waits, and shuts all nodes down on
+SIGTERM, so give it a `stop_grace_period` of a few minutes. `proxbase status --check` is
+the health check. The forwards listen on `0.0.0.0` inside the container
+(`PROXBASE_BIND_ADDRESS`); the example publishes them on the host's `127.0.0.1` only.
+No `privileged` or extra capabilities are needed, only `/dev/kvm` and its group.
+
+Limits: this needs a Linux host with KVM, and nested virtualization for guests inside
+the nodes. Docker Desktop on macOS and Windows has no `/dev/kvm`, so it does not work
+there. Plan for 4 GiB RAM per node (6 GiB with Ceph) plus about 15 GiB in the volume
+for a 3-node cluster. The paths printed by `proxbase env` are container paths; copy the
+key or CA out with `docker compose exec proxbase cat <path>`.
 
 ## Configuration
 

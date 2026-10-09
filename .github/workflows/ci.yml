@@ -44,3 +44,10 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
       - run: bin/proxbase version
         if: matrix.goarch == 'amd64'
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t proxbase:ci .
+      - run: docker run --rm proxbase:ci version

@@ -151,6 +151,7 @@ func (c *Cluster) machine(n config.Node) *qemu.Machine {
 		Nested:     *n.Spec.Nested,
 		RootDisk:   c.rootDisk(n),
 		NATMAC:     qemu.MAC(n.Index, 0),
+		Bind:       c.Cfg.Access.BindAddress,
 		UIPort:     ns.UIPort,
 		SSHPort:    ns.SSHPort,
 		QMP:        c.qmp(n),

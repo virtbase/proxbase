@@ -126,7 +126,7 @@ func preflight(cfg *config.Cluster, nodes []config.Node) error {
 		}
 		ui, ssh := cfg.Ports(n.Index)
 		for _, port := range []int{ui, ssh} {
-			l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+			l, err := net.Listen("tcp", net.JoinHostPort(cfg.Access.BindAddress, strconv.Itoa(port)))
 			if err != nil {
 				return fmt.Errorf("port %d for %s is in use; set access.portBase: %w", port, n.Name, err)
 			}

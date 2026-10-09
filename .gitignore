@@ -4,4 +4,4 @@
 /.spike
 *.test
 *.out
-coverage.txt
+coverage.txt/examples/compose/.env

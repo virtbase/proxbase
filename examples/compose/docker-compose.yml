@@ -1,0 +1,28 @@
+# Linux host with /dev/kvm (and nested virtualization) only.
+#   echo "KVM_GID=$(getent group kvm | cut -d: -f3)" > .env
+#   docker compose up -d && docker compose logs -f
+services:
+  proxbase:
+    build: ../..
+    image: proxbase:dev
+    command: ["up", "-f", "/config/cluster.yaml"]
+    devices:
+      - /dev/kvm
+    group_add:
+      - "${KVM_GID:?set KVM_GID to the GID of /dev/kvm, see the comment above}"
+    volumes:
+      - ./cluster.yaml:/config/cluster.yaml:ro
+      - proxbase-data:/data
+    ports:
+      - "127.0.0.1:18001-18003:18001-18003" # web UI / API of pve1-3
+      - "127.0.0.1:18101-18103:18101-18103" # SSH of pve1-3
+    stop_grace_period: 3m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "proxbase", "status", "--check"]
+      interval: 30s
+      timeout: 20s
+      start_period: 20m
+
+volumes:
+  proxbase-data:
