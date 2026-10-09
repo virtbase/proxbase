@@ -1,0 +1,61 @@
+name: E2E
+
+# A real single-node cluster on a GitHub-hosted runner (nested KVM), built from
+# this commit and created through the local action.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cluster:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: make build
+
+      - id: proxbase
+        uses: ./
+        with:
+          binary: bin/proxbase
+          name: e2e
+          nodes: "1"
+
+      - name: Health check
+        run: proxbase status e2e --check
+
+      - name: API call with the exported token
+        env:
+          ENDPOINT: ${{ steps.proxbase.outputs.endpoint }}
+          CA: ${{ steps.proxbase.outputs.ca-cert }}
+          TOKEN: ${{ steps.proxbase.outputs.api-token }}
+          ENV_FILE: ${{ steps.proxbase.outputs.env-file }}
+        run: |
+          curl -fsS --cacert "$CA" -H "Authorization: PVEAPIToken=$TOKEN" "${ENDPOINT}api2/json/version" | jq .
+          # the env file works too
+          # shellcheck source=/dev/null
+          . "$ENV_FILE"
+          curl -fsS --cacert "$PROXBASE_CA_CERT" -H "Authorization: PVEAPIToken=$PROXMOX_VE_API_TOKEN" "${PROXMOX_VE_ENDPOINT}api2/json/nodes" | jq -e '.data | length == 1'
+
+      - name: MCP server (status, exec, env, stop, snapshot, restore, start)
+        env:
+          PROXBASE_BIN: ${{ github.workspace }}/bin/proxbase
+          PROXBASE_E2E_CLUSTER: e2e
+        run: go test -tags e2e -run TestE2E -timeout 30m -v ./internal/mcpserver
+
+      - name: Logs
+        if: failure()
+        run: tail -n 100 ~/.local/share/proxbase/clusters/e2e/logs/*.log || true
+
+      - name: Destroy cluster
+        if: always()
+        run: proxbase destroy e2e --yes || true

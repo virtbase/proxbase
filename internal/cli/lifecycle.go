@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/virtbase/proxbase/internal/cluster"
+	"github.com/virtbase/proxbase/internal/job"
 	"github.com/virtbase/proxbase/internal/state"
 )
 
@@ -72,7 +73,7 @@ func listCmd() *cobra.Command {
 			}
 			rows := []row{}
 			for _, name := range names {
-				c, err := cluster.Open(name, logf)
+				c, err := cluster.Open(name, sink)
 				if err != nil {
 					rows = append(rows, row{Name: name, Phase: "broken: " + err.Error()})
 					continue
@@ -101,25 +102,6 @@ func listCmd() *cobra.Command {
 	return cmd
 }
 
-// healthy explains why a cluster is not fully healthy ("" if it is).
-func healthy(s *cluster.Status) string {
-	switch {
-	case s.Phase != "ready":
-		return "phase " + s.Phase
-	case s.Quorate == nil || !*s.Quorate:
-		return "not quorate"
-	}
-	for _, n := range s.Nodes {
-		if !n.Running || n.Online == nil || !*n.Online {
-			return n.Name + " not running or offline"
-		}
-	}
-	if s.Ceph != "" && s.Ceph != "HEALTH_OK" {
-		return "ceph " + s.Ceph
-	}
-	return ""
-}
-
 func statusCmd() *cobra.Command {
 	var output string
 	var check bool
@@ -134,7 +116,7 @@ func statusCmd() *cobra.Command {
 			}
 			s := c.Status(cmd.Context())
 			if check {
-				if why := healthy(s); why != "" {
+				if why := s.Problem(); why != "" {
 					return fmt.Errorf("cluster %s is not healthy: %s", s.Name, why)
 				}
 				fmt.Printf("cluster %s is healthy\n", s.Name)
@@ -202,8 +184,11 @@ func destroyCmd() *cobra.Command {
 					return fmt.Errorf("aborted")
 				}
 			}
-			if err := cluster.Destroy(name, logf); err != nil {
+			if err := cluster.Destroy(name, sink); err != nil {
 				return err
+			}
+			if j, err := job.New(name); err == nil {
+				j.Remove() // of a create started over MCP
 			}
 			logf("cluster %s destroyed", name)
 			return nil

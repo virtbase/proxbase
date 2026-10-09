@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -56,6 +57,46 @@ func (s *SSH) Close() error {
 		return nil
 	}
 	return s.client.Close()
+}
+
+// ExecResult is the outcome of a command; ExitCode is -1 if it did not exit normally.
+type ExecResult struct {
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	ExitCode int    `json:"exitCode"`
+}
+
+// Exec runs a command line through the login shell. A non-zero exit is not an
+// error; a cancelled ctx kills the command.
+func (s *SSH) Exec(ctx context.Context, command string) (ExecResult, error) {
+	sess, err := s.client.NewSession()
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("ssh session: %w", err)
+	}
+	defer sess.Close()
+	var stdout, stderr bytes.Buffer
+	sess.Stdout, sess.Stderr = &stdout, &stderr
+	done := make(chan error, 1)
+	go func() { done <- sess.Run(command) }()
+	select {
+	case err = <-done:
+	case <-ctx.Done():
+		// Best effort: closing the session ends Run even if the signal is not supported.
+		_ = sess.Signal(ssh.SIGKILL)
+		_ = sess.Close()
+		<-done
+		return ExecResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1}, ctx.Err()
+	}
+	r := ExecResult{Stdout: stdout.String(), Stderr: stderr.String()}
+	if err == nil {
+		return r, nil
+	}
+	if exit, ok := errors.AsType[*ssh.ExitError](err); ok {
+		r.ExitCode = exit.ExitStatus()
+		return r, nil
+	}
+	r.ExitCode = -1
+	return r, fmt.Errorf("run command: %w", err)
 }
 
 // Run executes a shell script (passed on stdin to bash) and returns stdout.

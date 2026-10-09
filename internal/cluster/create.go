@@ -13,28 +13,29 @@ import (
 	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/image"
 	"github.com/virtbase/proxbase/internal/network"
+	"github.com/virtbase/proxbase/internal/progress"
 	"github.com/virtbase/proxbase/internal/qemu"
 	"github.com/virtbase/proxbase/internal/state"
 )
 
 // Create builds a cluster, or resumes an unfinished create of the same name.
-func Create(ctx context.Context, cfg *config.Cluster, logf Logf) (*Cluster, error) {
+func Create(ctx context.Context, cfg *config.Cluster, p progress.Sink) (*Cluster, error) {
 	d := state.ForCluster(cfg.Name)
 	var c *Cluster
 	var err error
 	if d.Exists() {
-		if c, err = Open(cfg.Name, logf); err != nil {
+		if c, err = Open(cfg.Name, p); err != nil {
 			return nil, err
 		}
 		if c.St.Phase == state.PhaseReady {
 			return nil, fmt.Errorf("cluster %q already exists", cfg.Name)
 		}
-		logf("resuming unfinished create of %q (using its stored %s)", cfg.Name, d.Config())
+		c.Progress.Logf("resuming unfinished create of %q (using its stored %s)", cfg.Name, d.Config())
 	} else {
 		if err := preflight(cfg, cfg.NodeList()); err != nil {
 			return nil, err
 		}
-		if c, err = initialize(cfg, logf); err != nil {
+		if c, err = initialize(cfg, p); err != nil {
 			return nil, err
 		}
 	}

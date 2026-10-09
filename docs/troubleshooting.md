@@ -14,7 +14,8 @@ Everything of a cluster lives in `~/.local/share/proxbase/clusters/<name>/`:
 | `secrets/` | Root password, SSH key, API token, CA (mode 0600) |
 
 `proxbase status <name>` shows the last error of a failed create; re-running
-`proxbase create <name>` resumes it.
+`proxbase create <name>` resumes it. A create started through the
+[MCP server](mcp.md) logs its progress to `~/.local/share/proxbase/jobs/<name>.jsonl`.
 
 ## Common problems
 
@@ -28,7 +29,8 @@ Everything of a cluster lives in `~/.local/share/proxbase/clusters/<name>/`:
 | `Hash Sum mismatch` during apt (nodes or image build) | A broken mirror or path (seen over IPv6). Retry; for image builds pass `--build-arg APT_OPTS="-o Acquire::ForceIPv4=true"` |
 | `ceph not ready after 10m0s` | The error includes `ceph -s` and `ceph health detail`; usually too little memory per node |
 | Nested guests are slow or fail to start | Nested virtualization is off on the host (`proxbase doctor`) |
-| `cluster "x" is busy` | Another proxbase command holds the cluster lock |
+| `cluster "x" is busy` | Another proxbase command holds the cluster lock, e.g. a create started over MCP (`cluster_status` shows it) |
+| `a job for cluster x is already running` | An MCP create of that cluster is still running; use `cluster_wait`, or `cluster_destroy` to stop it |
 
 ## Starting over
 

@@ -3,6 +3,10 @@
 Commands take the cluster name as first argument. Without it they use `default`, or
 the only existing cluster. `proxbase <command> --help` shows the same information.
 
+Every command accepts `--progress text|json`: with `json`, progress and messages on
+stderr are JSON lines, ending with a `done` or `error` event (see
+[CI and automation](ci.md#machine-readable-output)). Results (`-o json`) stay on stdout.
+
 ## Clusters
 
 | Command | Description |
@@ -66,6 +70,7 @@ See [fault-injection.md](fault-injection.md).
 | `ssh [cluster] [node] [-- command…]` | SSH as root (default: first node) |
 | `console [cluster] <node>` | Serial console, Ctrl-] to detach |
 | `env [cluster]` | API endpoint and credentials: `--format shell\|json\|terraform`, `--export <dir>` |
+| `mcp` | MCP server on stdio for AI agents ([mcp.md](mcp.md)) |
 
 ## Host and files
 
@@ -84,6 +89,6 @@ See [fault-injection.md](fault-injection.md).
 
 | Variable | Effect |
 | --- | --- |
-| `XDG_DATA_HOME` | Cluster state in `$XDG_DATA_HOME/proxbase/clusters` (default `~/.local/share`) |
+| `XDG_DATA_HOME` | Cluster state in `$XDG_DATA_HOME/proxbase/clusters`, MCP create jobs in `…/proxbase/jobs` (default `~/.local/share`) |
 | `XDG_CACHE_HOME` | ISO cache in `$XDG_CACHE_HOME/proxbase/iso` (default `~/.cache`) |
 | `PROXBASE_BIND_ADDRESS` | Default for `access.bindAddress` of new clusters |

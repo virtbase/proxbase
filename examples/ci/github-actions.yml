@@ -1,5 +1,6 @@
 # Example workflow: run tests against a real single-node Proxmox VE cluster on a
 # GitHub-hosted Linux runner (they expose /dev/kvm). Copy to .github/workflows/.
+# Pin the action to a release tag or, better, its commit SHA.
 name: Proxmox integration tests
 
 on: [pull_request]
@@ -10,29 +11,30 @@ permissions:
 jobs:
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Enable KVM for the runner user
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-      - name: Install QEMU and proxbase
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
-          go install github.com/virtbase/proxbase/cmd/proxbase@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Create cluster
-        run: proxbase create ci --nodes 1 --memory 4G --data-disks none
+
+      # Installs QEMU and proxbase, enables KVM, caches the ISO and base image,
+      # and creates the cluster. Outputs: endpoint, api-token, ca-cert, ssh-key, env-file.
+      - id: pve
+        uses: virtbase/proxbase@v0
+        with:
+          name: ci
+          nodes: "1"
+          # config: test/cluster.yaml   # or a cluster file
+
       - name: Run tests
+        env:
+          PVE_ENV: ${{ steps.pve.outputs.env-file }}
         run: |
-          eval "$(proxbase env ci)"
+          . "$PVE_ENV"   # PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN, PROXBASE_CA_CERT, ...
           curl -sf --cacert "$PROXBASE_CA_CERT" -H "Authorization: PVEAPIToken=$PROXMOX_VE_API_TOKEN" \
             "${PROXMOX_VE_ENDPOINT}api2/json/version"
           # your tests here, e.g. go test ./... -tags integration
-      - name: Logs on failure
-        if: failure()
-        run: tail -n 50 ~/.local/share/proxbase/clusters/ci/logs/*.log
+          proxbase ssh ci -- pvesh get /cluster/resources --output-format json
+
+      # Composite actions have no post step: destroy the cluster explicitly.
       - name: Destroy cluster
         if: always()
         run: proxbase destroy ci --yes

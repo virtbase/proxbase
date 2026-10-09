@@ -3,9 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -41,12 +38,9 @@ func createCmd() *cobra.Command {
 				_, err = os.Stdout.Write(b)
 				return err
 			}
-			c, err := cluster.Create(cmd.Context(), cfg, logf)
+			c, err := cluster.Create(cmd.Context(), cfg, sink)
 			if err != nil {
-				if c != nil {
-					return fmt.Errorf("%w\n\nRe-run `proxbase create %s` to resume, or `proxbase destroy %s` to start over", err, cfg.Name, cfg.Name)
-				}
-				return err
+				return createError(c, err)
 			}
 			logf("created in %s", c.St.Duration)
 			return printStatus(c.Status(cmd.Context()), o.output)
@@ -56,6 +50,16 @@ func createCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&o.dryRun, "dry-run", false, "print the resolved cluster file and exit")
 	cmd.Flags().StringVarP(&o.output, "output", "o", "table", "output format: table|json (with --dry-run: yaml|json)")
 	return cmd
+}
+
+// createError tells how to go on after a failed create of an initialized cluster.
+func createError(c *cluster.Cluster, err error) error {
+	if c == nil {
+		return err
+	}
+	name := c.Cfg.Name
+	return &hintError{err: err, log: c.Dir.Log(""),
+		hint: fmt.Sprintf("Re-run `proxbase create %s` to resume, or `proxbase destroy %s` to start over", name, name)}
 }
 
 // addFlags registers the flags that override fields of the cluster file.
@@ -73,8 +77,6 @@ func (o *createOpts) addFlags(cmd *cobra.Command) {
 	f.StringVar(&o.bind, "bind-address", "", "address for the UI/SSH forwards (default $PROXBASE_BIND_ADDRESS or 127.0.0.1)")
 }
 
-var multiDiskRe = regexp.MustCompile(`^([0-9]+)x([0-9]+[MGT])$`)
-
 func (o *createOpts) resolve(cmd *cobra.Command, args []string) (*config.Cluster, error) {
 	cfg := &config.Cluster{}
 	if o.file != "" {
@@ -83,86 +85,36 @@ func (o *createOpts) resolve(cmd *cobra.Command, args []string) (*config.Cluster
 			return nil, fmt.Errorf("%s: %w", o.file, err)
 		}
 	}
-	if len(args) > 0 {
-		cfg.Name = args[0]
-	}
 	f := cmd.Flags()
-	d := &cfg.Nodes.Defaults
+	ov := config.Overrides{Golden: o.golden}
+	if len(args) > 0 {
+		ov.Name = args[0]
+	}
+	set := func(flag string, dst **string, v *string) {
+		if f.Changed(flag) {
+			*dst = v
+		}
+	}
 	if f.Changed("nodes") {
-		cfg.Nodes.Count = o.nodes
+		ov.Nodes = &o.nodes
 	}
 	if f.Changed("cpus") {
-		d.CPUs = o.cpus
+		ov.CPUs = &o.cpus
 	}
-	if f.Changed("memory") {
-		d.Memory = o.memory
+	set("memory", &ov.Memory, &o.memory)
+	set("disk", &ov.Disk, &o.disk)
+	set("data-disks", &ov.DataDisks, &o.dataDisks)
+	set("storage", &ov.Storage, &o.storage)
+	set("pve-version", &ov.Version, &o.version)
+	set("bind-address", &ov.BindAddress, &o.bind)
+	if env := os.Getenv("PROXBASE_BIND_ADDRESS"); ov.BindAddress == nil && cfg.Access.BindAddress == "" && env != "" {
+		ov.BindAddress = &env
 	}
-	if f.Changed("disk") {
-		d.RootDisk.Size = o.disk
-	}
-	if f.Changed("pve-version") {
-		cfg.Proxmox.Version = o.version
-	}
-	if o.golden {
-		cfg.Proxmox.Golden = true
-	}
-	if f.Changed("bind-address") {
-		cfg.Access.BindAddress = o.bind
-	} else if env := os.Getenv("PROXBASE_BIND_ADDRESS"); cfg.Access.BindAddress == "" && env != "" {
-		cfg.Access.BindAddress = env
-	}
-	if f.Changed("data-disks") {
-		disks, err := parseDisks(o.dataDisks)
-		if err != nil {
-			return nil, err
-		}
-		d.DataDisks = disks
-		cfg.Storage.ZFS = nil // re-derive the default pool from the new disks
-	}
-	if f.Changed("storage") {
-		switch o.storage {
-		case "zfs":
-			if len(d.DataDisks) == 0 && d.DataDisks != nil {
-				return nil, fmt.Errorf("--storage zfs needs data disks")
-			}
-			cfg.Storage.Ceph = nil
-		case "ceph":
-			cfg.Storage.ZFS = []config.ZFSPool{}
-			if cfg.Storage.Ceph == nil {
-				cfg.Storage.Ceph = &config.Ceph{}
-			}
-			cfg.Storage.Ceph.Enabled = true
-		case "none":
-			cfg.Storage.ZFS = []config.ZFSPool{}
-			cfg.Storage.Ceph = nil
-		default:
-			return nil, fmt.Errorf("--storage must be zfs, ceph or none")
-		}
-	}
-	cfg.SetDefaults()
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid cluster configuration:\n%w", err)
+	if err := ov.Apply(cfg); err != nil {
+		return nil, err
 	}
 	for _, w := range cfg.Warnings() {
 		logf("warning: %s", w)
 	}
 	return cfg, nil
-}
-
-func parseDisks(s string) ([]config.Disk, error) {
-	disks := []config.Disk{}
-	if s == "none" || s == "0" || s == "" {
-		return disks, nil
-	}
-	if m := multiDiskRe.FindStringSubmatch(s); m != nil {
-		n, _ := strconv.Atoi(m[1])
-		for i := 0; i < n; i++ {
-			disks = append(disks, config.Disk{Size: m[2]})
-		}
-		return disks, nil
-	}
-	for _, size := range strings.Split(s, ",") {
-		disks = append(disks, config.Disk{Size: strings.TrimSpace(size)})
-	}
-	return disks, nil
 }

@@ -13,6 +13,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/virtbase/proxbase/internal/config"
+	"github.com/virtbase/proxbase/internal/progress"
 	"github.com/virtbase/proxbase/internal/retry"
 	"github.com/virtbase/proxbase/internal/state"
 )
@@ -117,7 +119,10 @@ func (c *Cluster) stop(ctx context.Context, timeout time.Duration) error {
 }
 
 // Destroy kills everything belonging to the cluster and removes its directory.
-func Destroy(name string, logf Logf) error {
+func Destroy(name string, p progress.Sink) error {
+	if err := config.CheckName(name); err != nil {
+		return err
+	}
 	d := state.ForCluster(name)
 	if _, err := os.Stat(string(d)); err != nil {
 		return fmt.Errorf("cluster %q does not exist", name)
@@ -127,7 +132,7 @@ func Destroy(name string, logf Logf) error {
 		return err
 	}
 	defer unlock()
-	if c, err := Open(name, logf); err == nil {
+	if c, err := Open(name, p); err == nil {
 		_ = c.stop(context.Background(), 0)
 	}
 	killStrays(string(d))

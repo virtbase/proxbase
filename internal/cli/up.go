@@ -27,7 +27,7 @@ cleanly and exits. An existing cluster keeps its stored configuration.`,
 				return err
 			}
 			ctx := cmd.Context()
-			c, runErr := run(ctx, cfg.Name, func() (*cluster.Cluster, error) { return cluster.Create(ctx, cfg, logf) })
+			c, runErr := run(ctx, cfg.Name, func() (*cluster.Cluster, error) { return cluster.Create(ctx, cfg, sink) })
 			if c == nil {
 				return runErr
 			}
@@ -54,7 +54,7 @@ cleanly and exits. An existing cluster keeps its stored configuration.`,
 // run starts an existing ready cluster or creates/resumes one.
 func run(ctx context.Context, name string, create func() (*cluster.Cluster, error)) (*cluster.Cluster, error) {
 	if state.ForCluster(name).Exists() {
-		c, err := cluster.Open(name, logf)
+		c, err := cluster.Open(name, sink)
 		if err != nil {
 			return nil, err
 		}
