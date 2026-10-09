@@ -32,7 +32,7 @@ func Create(ctx context.Context, cfg *config.Cluster, logf Logf) (*Cluster, erro
 		}
 		logf("resuming unfinished create of %q (using its stored %s)", cfg.Name, d.Config())
 	} else {
-		if err := preflight(cfg); err != nil {
+		if err := preflight(cfg, cfg.NodeList()); err != nil {
 			return nil, err
 		}
 		if c, err = initialize(cfg, logf); err != nil {
@@ -106,7 +106,7 @@ func (c *Cluster) create(ctx context.Context) error {
 var unixPathMax = 107
 
 // preflight catches host problems before anything is written.
-func preflight(cfg *config.Cluster) error {
+func preflight(cfg *config.Cluster, nodes []config.Node) error {
 	f, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
 	if err != nil {
 		return fmt.Errorf("KVM is required: %w (run `proxbase doctor`)", err)
@@ -118,7 +118,7 @@ func preflight(cfg *config.Cluster) error {
 		}
 	}
 	d := state.ForCluster(cfg.Name)
-	for _, n := range cfg.NodeList() {
+	for _, n := range nodes {
 		for _, net := range cfg.Networks {
 			if p := d.Run(n.Name + "-" + net.Name + ".sock"); len(p) > unixPathMax {
 				return fmt.Errorf("socket path %s is too long (%d > %d bytes); use a shorter XDG_DATA_HOME or names", p, len(p), unixPathMax)

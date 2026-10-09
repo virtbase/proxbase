@@ -15,7 +15,7 @@ func machine() *Machine {
 		RootDisk: "/d/pve1-root.qcow2", DataDisks: []string{"/d/pve1-data0.qcow2"},
 		NATMAC: MAC(1, 0), UIPort: 18001, SSHPort: 18101,
 		NICs: []NIC{{MAC: MAC(1, 1), Local: "/r/pve1-cluster.sock", Switch: "/r/sw-cluster.sock"}},
-		QMP:  "/r/pve1.qmp", PIDFile: "/r/pve1.pid", Console: "/l/pve1-console.log",
+		QMP:  "/r/pve1.qmp", PIDFile: "/r/pve1.pid", Console: "/r/pve1-console.sock", ConsoleLog: "/l/pve1-console.log",
 	}
 }
 

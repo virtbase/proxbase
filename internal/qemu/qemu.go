@@ -38,20 +38,21 @@ type Install struct {
 }
 
 type Machine struct {
-	Name      string // process/guest name, e.g. lab-pve1
-	CPUs      int
-	MemoryMiB int
-	Nested    bool
-	RootDisk  string
-	DataDisks []string
-	NATMAC    string
-	UIPort    int
-	SSHPort   int
-	NICs      []NIC
-	QMP       string
-	PIDFile   string
-	Console   string   // console log file (run mode)
-	Install   *Install // nil = run mode
+	Name       string // process/guest name, e.g. lab-pve1
+	CPUs       int
+	MemoryMiB  int
+	Nested     bool
+	RootDisk   string
+	DataDisks  []string
+	NATMAC     string
+	UIPort     int
+	SSHPort    int
+	NICs       []NIC
+	QMP        string
+	PIDFile    string
+	Console    string   // serial console socket (run mode)
+	ConsoleLog string   // everything the serial console printed
+	Install    *Install // nil = run mode
 }
 
 // MAC returns the MAC of NIC nic (0 = NAT) on node index node.
@@ -77,8 +78,9 @@ func (m *Machine) Args() []string {
 	a = append(a, "-drive", "if=none,id=root,file="+m.RootDisk+",format=qcow2,cache=unsafe,discard=unmap")
 	a = append(a, dev("virtio-blk-pci,drive=root,bus=pcie.0,addr=%#x,bootindex=1", slotRoot)...)
 	a = append(a, dev("qemu-xhci,id=usb,bus=pcie.0,addr=%#x", slotUSB)...)
-	fwd := fmt.Sprintf("hostfwd=tcp:127.0.0.1:%d-:22,hostfwd=tcp:127.0.0.1:%d-:8006", m.SSHPort, m.UIPort)
-	a = append(a, "-netdev", "user,id=nat,"+fwd)
+	fwd := fmt.Sprintf("hostfwd=tcp:127.0.0.1:%d-10.0.2.15:22,hostfwd=tcp:127.0.0.1:%d-10.0.2.15:8006", m.SSHPort, m.UIPort)
+	// Nested guests bridged to vmbr0 get DHCP leases from .100 on; the node is .15.
+	a = append(a, "-netdev", "user,id=nat,dhcpstart=10.0.2.100,"+fwd)
 	a = append(a, dev("virtio-net-pci,netdev=nat,mac=%s,bus=pcie.0,addr=%#x", m.NATMAC, slotNAT)...)
 	for i, n := range m.NICs {
 		a = append(a, "-netdev", fmt.Sprintf("dgram,id=net%d,local.type=unix,local.path=%s,remote.type=unix,remote.path=%s", i, n.Local, n.Switch))
@@ -105,7 +107,7 @@ func (m *Machine) Args() []string {
 		)
 	} else {
 		a = append(a,
-			"-chardev", "file,id=ser0,path="+m.Console+",append=on",
+			"-chardev", "socket,id=ser0,path="+m.Console+",server=on,wait=off,logfile="+m.ConsoleLog+",logappend=on",
 			"-serial", "chardev:ser0",
 			"-daemonize",
 		)

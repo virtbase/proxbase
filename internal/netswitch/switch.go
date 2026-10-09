@@ -29,11 +29,21 @@ func Listen(path string, peers []string) (*Switch, error) {
 		return nil, err
 	}
 	_ = conn.SetReadBuffer(4 << 20)
-	s := &Switch{conn: conn, ports: map[string]*net.UnixAddr{}, fdb: map[[6]byte]*net.UnixAddr{}}
-	for _, p := range peers {
-		s.ports[p] = &net.UnixAddr{Name: p, Net: "unixgram"}
-	}
+	s := &Switch{conn: conn, fdb: map[[6]byte]*net.UnixAddr{}}
+	s.SetPeers(peers)
 	return s, nil
+}
+
+// SetPeers replaces the accepted peers (nodes added or removed).
+func (s *Switch) SetPeers(peers []string) {
+	ports := map[string]*net.UnixAddr{}
+	for _, p := range peers {
+		ports[p] = &net.UnixAddr{Name: p, Net: "unixgram"}
+	}
+	s.mu.Lock()
+	s.ports = ports
+	s.fdb = map[[6]byte]*net.UnixAddr{}
+	s.mu.Unlock()
 }
 
 // Serve forwards frames until ctx is cancelled.
@@ -51,7 +61,9 @@ func (s *Switch) Serve(ctx context.Context) error {
 		if src == nil || n < 14 {
 			continue
 		}
+		s.mu.Lock()
 		in, ok := s.ports[src.Name]
+		s.mu.Unlock()
 		if !ok {
 			continue
 		}
@@ -68,6 +80,7 @@ func (s *Switch) forward(frame []byte, in *net.UnixAddr) {
 		s.fdb[srcMAC] = in
 	}
 	out, known := s.fdb[dst]
+	ports := s.ports
 	s.mu.Unlock()
 	if known && dst[0]&1 == 0 {
 		if out != in {
@@ -75,7 +88,7 @@ func (s *Switch) forward(frame []byte, in *net.UnixAddr) {
 		}
 		return
 	}
-	for _, p := range s.ports {
+	for _, p := range ports {
 		if p != in {
 			s.send(frame, p)
 		}

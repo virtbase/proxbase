@@ -16,17 +16,25 @@ func (c *Cluster) postInstallScript(n config.Node) string {
 		fmt.Fprintf(&hosts, "%s %s.%s %s\n", c.corosyncIP(o), o.Name, c.Cfg.Proxmox.Domain, o.Name)
 	}
 	for i, net := range c.Cfg.Networks {
-		ip, bits, _ := config.NodeIP(net.CIDR, n.Index)
 		mtu := ""
 		if net.MTU != 0 {
 			mtu = fmt.Sprintf("\tmtu %d\n", net.MTU)
 		}
 		fmt.Fprintf(&nics, "nic%d=$(ifname %s)\n", i, qemu.MAC(n.Index, i+1))
 		fmt.Fprintf(&ifaces, "auto $nic%d\niface $nic%d inet manual\n%s\n", i, i, mtu)
-		fmt.Fprintf(&ifaces, "auto %s\niface %s inet static\n\taddress %s/%d\n\tbridge-ports $nic%d\n\tbridge-stp off\n\tbridge-fd 0\n",
-			net.Bridge, net.Bridge, ip, bits, i)
+		if net.CIDR == "" {
+			fmt.Fprintf(&ifaces, "auto %s\niface %s inet manual\n", net.Bridge, net.Bridge)
+		} else {
+			ip, bits, _ := config.NodeIP(net.CIDR, n.Index)
+			fmt.Fprintf(&ifaces, "auto %s\niface %s inet static\n\taddress %s/%d\n", net.Bridge, net.Bridge, ip, bits)
+		}
+		fmt.Fprintf(&ifaces, "\tbridge-ports $nic%d\n\tbridge-stp off\n\tbridge-fd 0\n", i)
 		if net.VLANAware {
-			ifaces.WriteString("\tbridge-vlan-aware yes\n\tbridge-vids 2-4094\n")
+			vids := "2-4094"
+			if len(net.VLANs) > 0 {
+				vids = strings.Join(net.VLANs, " ")
+			}
+			fmt.Fprintf(&ifaces, "\tbridge-vlan-aware yes\n\tbridge-vids %s\n", vids)
 		}
 		ifaces.WriteString(mtu + "\n")
 	}
@@ -48,6 +56,9 @@ sed -i '/^10\.0\.2\.15[[:space:]]/d' /etc/hosts
 block /etc/hosts "$(cat <<'EOF'
 %sEOF
 )"
+
+# Login prompt on the serial console (proxbase console).
+systemctl enable --now serial-getty@ttyS0.service >/dev/null 2>&1
 
 # No-subscription repository instead of enterprise.
 codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
@@ -76,3 +87,19 @@ else
 fi
 `, hosts.String(), nics.String(), ifaces.String())
 }
+
+// aptWait waits for apt runs started by PVE itself (pveupdate right after boot).
+const aptWait = `
+for i in $(seq 300); do pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null || break; sleep 2; done
+apt='apt-get -o DPkg::Lock::Timeout=600'
+`
+
+// upgradeScript brings a node to the newest no-subscription packages.
+const upgradeScript = aptWait + `
+export DEBIAN_FRONTEND=noninteractive
+log=/var/log/proxbase-upgrade.log
+if ! { $apt update && $apt -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade; } >$log 2>&1; then
+	tail -n 20 $log >&2; exit 1
+fi
+grep -E '^[0-9]+ upgraded' $log || true
+`

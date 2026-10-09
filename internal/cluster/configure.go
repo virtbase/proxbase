@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/pve"
 	"golang.org/x/sync/errgroup"
 )
@@ -29,10 +31,36 @@ func (c *Cluster) postInstall(ctx context.Context) error {
 			if strings.Contains(out, "changed") {
 				c.step("%s: hosts, repositories and bridges configured", n.Name)
 			}
+			if !c.Cfg.Proxmox.Upgrade {
+				return nil
+			}
+			t0 := time.Now()
+			out, err = s.Run(upgradeScript)
+			if err != nil {
+				return fmt.Errorf("%s: dist-upgrade: %w", n.Name, err)
+			}
+			c.step("%s: dist-upgrade in %s: %s", n.Name, time.Since(t0).Round(time.Second), strings.TrimSpace(out))
 			return nil
 		})
 	}
 	return g.Wait()
+}
+
+// links returns the corosync link parameters (link0, link1) of a node.
+func (c *Cluster) links(n config.Node) url.Values {
+	v := url.Values{}
+	for i, net := range c.Cfg.CorosyncNetworks() {
+		v.Set(fmt.Sprintf("link%d", i), c.nodeIP(n, net))
+	}
+	return v
+}
+
+func describeLinks(v url.Values) string {
+	s := "link0 " + v.Get("link0")
+	if l1 := v.Get("link1"); l1 != "" {
+		s += ", link1 " + l1
+	}
+	return s
 }
 
 type clusterStatus struct {
@@ -74,9 +102,11 @@ func (c *Cluster) formCluster(ctx context.Context) error {
 		return err
 	}
 	if cs == nil {
-		c.step("creating cluster %s on %s (link0 %s)", c.Cfg.Name, first.Name, c.corosyncIP(first))
+		form := c.links(first)
+		form.Set("clustername", c.Cfg.Name)
+		c.step("creating cluster %s on %s (%s)", c.Cfg.Name, first.Name, describeLinks(form))
 		var upid string
-		if err := api.Post(ctx, "/cluster/config", url.Values{"clustername": {c.Cfg.Name}, "link0": {c.corosyncIP(first)}}, &upid); err != nil {
+		if err := api.Post(ctx, "/cluster/config", form, &upid); err != nil {
 			return fmt.Errorf("create cluster: %w", err)
 		}
 		if err := api.WaitTask(ctx, first.Name, upid, 2*time.Minute); err != nil {
@@ -108,17 +138,15 @@ func (c *Cluster) formCluster(ctx context.Context) error {
 		if _, ok := members[n.Name]; ok {
 			continue
 		}
-		c.step("joining %s (link0 %s)", n.Name, c.corosyncIP(n))
+		form := c.links(n)
+		c.step("joining %s (%s)", n.Name, describeLinks(form))
 		napi, err := c.api(ctx, n.Name)
 		if err != nil {
 			return err
 		}
-		form := url.Values{
-			"hostname":    {c.corosyncIP(first)},
-			"password":    {c.password},
-			"fingerprint": {fp},
-			"link0":       {c.corosyncIP(n)},
-		}
+		form.Set("hostname", c.corosyncIP(first))
+		form.Set("password", c.password)
+		form.Set("fingerprint", fp)
 		// The cluster refuses joins until it is quorate.
 		if err := c.waitMember(ctx, api, first.Name, nil, "", 2*time.Minute); err != nil {
 			return err
@@ -129,6 +157,11 @@ func (c *Cluster) formCluster(ctx context.Context) error {
 		}
 		if err := c.waitMember(ctx, api, n.Name, napi, upid, 3*time.Minute); err != nil {
 			return err
+		}
+	}
+	if m, ok := c.Cfg.RoleNetwork(config.RoleMigration); ok {
+		if err := api.Put(ctx, "/cluster/options", url.Values{"migration": {"type=secure,network=" + m.CIDR}}, nil); err != nil {
+			return fmt.Errorf("set migration network: %w", err)
 		}
 	}
 	return nil
@@ -255,14 +288,20 @@ func (c *Cluster) createZFS(ctx context.Context) error {
 		return err
 	}
 	for _, z := range c.Cfg.Storage.ZFS {
-		exists := false
-		for _, s := range storages {
-			exists = exists || s.Storage == z.Name
-		}
+		exists := slices.ContainsFunc(storages, func(s struct {
+			Storage string `json:"storage"`
+		}) bool {
+			return s.Storage == z.Name
+		})
+		nodes := strings.Join(names, ",")
 		if exists {
+			// Keep the node list current after node add/remove.
+			if err := first.Put(ctx, "/storage/"+z.Name, url.Values{"nodes": {nodes}}, nil); err != nil {
+				return fmt.Errorf("update storage %s: %w", z.Name, err)
+			}
 			continue
 		}
-		form := url.Values{"storage": {z.Name}, "type": {"zfspool"}, "pool": {z.Name}, "content": {"images,rootdir"}, "sparse": {"1"}, "nodes": {strings.Join(names, ",")}}
+		form := url.Values{"storage": {z.Name}, "type": {"zfspool"}, "pool": {z.Name}, "content": {"images,rootdir"}, "sparse": {"1"}, "nodes": {nodes}}
 		if err := first.Post(ctx, "/storage", form, nil); err != nil {
 			return fmt.Errorf("add storage %s: %w", z.Name, err)
 		}

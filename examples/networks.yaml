@@ -1,0 +1,35 @@
+# Three Ceph nodes with separate networks:
+#   vmbr0  NAT uplink (always present): web UI/SSH forwards, internet for nodes and guests
+#   mgmt   corosync link0; node names resolve here
+#   cluster corosync link1 and live migration
+#   storage Ceph public network, jumbo frames
+#   replic Ceph cluster (replication) network, jumbo frames
+#   guests L2 only, VLAN-aware, for guest VLANs 100 and 200-299
+apiVersion: proxbase.dev/v1alpha1
+kind: Cluster
+name: net
+nodes:
+  count: 3
+  defaults:
+    memory: 6G
+networks:
+  - name: mgmt
+    cidr: 10.10.0.0/24
+    roles: [corosync]
+  - name: cluster
+    cidr: 10.10.10.0/24
+    roles: [corosync, migration]
+  - name: storage
+    cidr: 10.10.20.0/24
+    mtu: 9000
+    roles: [ceph-public]
+  - name: replic
+    cidr: 10.10.21.0/24
+    mtu: 9000
+    roles: [ceph-cluster]
+  - name: guests
+    vlanAware: true
+    vlans: ["100", "200-299"]
+storage:
+  ceph:
+    enabled: true

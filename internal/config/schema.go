@@ -26,6 +26,7 @@ proxmox:
   keyboard: en-us
   country: us
   domain: proxbase.internal
+  upgrade: false            # apt dist-upgrade on every node before clustering
   sshKeys: []               # extra public keys for root
 nodes:
   count: 3
@@ -38,11 +39,15 @@ nodes:
     dataDisks:              # vdb, vdc, ... inside the node
       - size: 32G
   overrides: {}             # e.g. pve1: {memory: 8G}
-networks:
+networks:                   # vmbr0 is always the NAT uplink (web UI and SSH forwards)
   - name: cluster
-    cidr: 10.10.10.0/24     # node n gets .1n (pve1 = .11)
+    cidr: 10.10.10.0/24     # node n gets .1n (pve1 = .11); omit for an L2-only network
     bridge: vmbr1
-    corosync: true
+    roles: [corosync]       # corosync (up to two: link0, link1), ceph-public, ceph-cluster, migration
+  # - name: guests
+  #   bridge: vmbr2
+  #   vlanAware: true
+  #   vlans: ["100", "200-299"]
 storage:
   zfs:
     - name: tank
@@ -53,7 +58,6 @@ storage:
   # ceph:
   #   enabled: true
   #   version: squid          # or tentacle
-  #   network: cluster        # public and cluster network; default the corosync one
   #   osdDisks: [vdb]         # default: data disks not used by ZFS
   #   pools:
   #     - {name: ceph-vm, size: 3, minSize: 2, pgNum: 32, application: rbd}

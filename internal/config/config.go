@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -44,6 +45,7 @@ type Proxmox struct {
 	Country  string   `yaml:"country" json:"country,omitempty"`
 	Domain   string   `yaml:"domain" json:"domain,omitempty"`
 	SSHKeys  []string `yaml:"sshKeys,omitempty" json:"sshKeys,omitempty" jsonschema:"description=Extra public keys for root on every node"`
+	Upgrade  bool     `yaml:"upgrade,omitempty" json:"upgrade,omitempty" jsonschema:"description=Run apt dist-upgrade on every node before clustering"`
 }
 
 type Nodes struct {
@@ -51,6 +53,7 @@ type Nodes struct {
 	NamePattern string              `yaml:"namePattern" json:"namePattern,omitempty" jsonschema:"description=Node name; {n} is replaced by the node number"`
 	Defaults    NodeSpec            `yaml:"defaults" json:"defaults,omitempty"`
 	Overrides   map[string]NodeSpec `yaml:"overrides,omitempty" json:"overrides,omitempty" jsonschema:"description=Per-node settings keyed by node name"`
+	Removed     []int               `yaml:"removed,omitempty" json:"removed,omitempty" jsonschema:"description=Node numbers removed with proxbase node remove; the others keep their addresses"`
 }
 
 type NodeSpec struct {
@@ -66,14 +69,25 @@ type Disk struct {
 	Filesystem string `yaml:"filesystem,omitempty" json:"filesystem,omitempty" jsonschema:"enum=zfs,enum=ext4,enum=xfs,enum=btrfs,description=Root disk only"`
 }
 
+// Network roles. A cluster may have two corosync networks (link0 and link1).
+const (
+	RoleCorosync    = "corosync"
+	RoleCephPublic  = "ceph-public"
+	RoleCephCluster = "ceph-cluster"
+	RoleMigration   = "migration"
+)
+
 type Network struct {
-	Name      string `yaml:"name" json:"name"`
-	CIDR      string `yaml:"cidr" json:"cidr"`
-	Bridge    string `yaml:"bridge" json:"bridge,omitempty"`
-	VLANAware bool   `yaml:"vlanAware,omitempty" json:"vlanAware,omitempty"`
-	MTU       int    `yaml:"mtu,omitempty" json:"mtu,omitempty"`
-	Corosync  bool   `yaml:"corosync" json:"corosync,omitempty"`
+	Name      string   `yaml:"name" json:"name"`
+	CIDR      string   `yaml:"cidr,omitempty" json:"cidr,omitempty" jsonschema:"description=IPv4 prefix; node n gets .1n. Leave empty for an L2-only network (bridge without node IPs)"`
+	Bridge    string   `yaml:"bridge" json:"bridge,omitempty"`
+	VLANAware bool     `yaml:"vlanAware,omitempty" json:"vlanAware,omitempty"`
+	VLANs     []string `yaml:"vlans,omitempty" json:"vlans,omitempty" jsonschema:"description=VLAN IDs or ranges allowed on a VLAN-aware bridge (default 2-4094)"`
+	MTU       int      `yaml:"mtu,omitempty" json:"mtu,omitempty"`
+	Roles     []string `yaml:"roles,omitempty" json:"roles,omitempty" jsonschema:"enum=corosync,enum=ceph-public,enum=ceph-cluster,enum=migration"`
 }
+
+func (n Network) Has(role string) bool { return slices.Contains(n.Roles, role) }
 
 type Storage struct {
 	ZFS  []ZFSPool `yaml:"zfs" json:"zfs,omitempty"`
@@ -83,7 +97,6 @@ type Storage struct {
 type Ceph struct {
 	Enabled  bool       `yaml:"enabled" json:"enabled"`
 	Version  string     `yaml:"version" json:"version,omitempty" jsonschema:"enum=squid,enum=tentacle"`
-	Network  string     `yaml:"network" json:"network,omitempty" jsonschema:"description=Name of the network for Ceph public and cluster traffic; default the corosync network"`
 	OSDDisks []string   `yaml:"osdDisks" json:"osdDisks,omitempty" jsonschema:"description=Data disk devices (vdb, vdc, ...) for OSDs; default all not used by ZFS"`
 	Pools    []CephPool `yaml:"pools" json:"pools,omitempty"`
 	CephFS   *bool      `yaml:"cephfs" json:"cephfs,omitempty" jsonschema:"description=CephFS storage for ISOs, templates, backups and snippets (default true)"`
@@ -191,15 +204,18 @@ func (c *Cluster) SetDefaults() {
 	}
 
 	if len(c.Networks) == 0 {
-		c.Networks = []Network{{Name: "cluster", CIDR: "10.10.10.0/24", Corosync: true}}
+		c.Networks = []Network{{Name: "cluster", CIDR: "10.10.10.0/24", Roles: []string{RoleCorosync}}}
 	}
-	hasCorosync := false
 	for i := range c.Networks {
 		def(&c.Networks[i].Bridge, fmt.Sprintf("vmbr%d", i+1))
-		hasCorosync = hasCorosync || c.Networks[i].Corosync
 	}
-	if !hasCorosync {
-		c.Networks[0].Corosync = true
+	if len(c.CorosyncNetworks()) == 0 {
+		for i := range c.Networks {
+			if c.Networks[i].CIDR != "" {
+				c.Networks[i].Roles = append(c.Networks[i].Roles, RoleCorosync)
+				break
+			}
+		}
 	}
 
 	if c.Storage.ZFS == nil && len(d.DataDisks) > 0 && !c.CephEnabled() {
@@ -238,6 +254,7 @@ var (
 	memRe    = regexp.MustCompile(`^([0-9]+)([MG])$`)
 	sizeRe   = regexp.MustCompile(`^[0-9]+[MGT]$`)
 	bridgeRe = regexp.MustCompile(`^vmbr[0-9]{1,4}$`)
+	vlanRe   = regexp.MustCompile(`^[0-9]{1,4}(-[0-9]{1,4})?$`)
 	versRe   = regexp.MustCompile(`^[0-9]+\.[0-9]+(-[0-9]+)?$`)
 	minDisks = map[string]int{"single": 1, "mirror": 2, "raid10": 4, "raidz": 3, "raidz2": 4, "raidz3": 5}
 )
@@ -255,11 +272,22 @@ func MemoryMiB(s string) (int, error) {
 	return v, nil
 }
 
+// MaxNodeIndex is the highest node number in use.
+func (c *Cluster) MaxNodeIndex() int { return c.Nodes.Count + len(c.Nodes.Removed) }
+
+// NodeName returns the name of node number i.
+func (c *Cluster) NodeName(i int) string {
+	return strings.ReplaceAll(c.Nodes.NamePattern, "{n}", strconv.Itoa(i))
+}
+
 // NodeList resolves names and per-node specs (defaults merged with overrides).
 func (c *Cluster) NodeList() []Node {
 	out := make([]Node, 0, c.Nodes.Count)
-	for i := 1; i <= c.Nodes.Count; i++ {
-		name := strings.ReplaceAll(c.Nodes.NamePattern, "{n}", strconv.Itoa(i))
+	for i := 1; i <= c.MaxNodeIndex(); i++ {
+		if slices.Contains(c.Nodes.Removed, i) {
+			continue
+		}
+		name := c.NodeName(i)
 		spec := c.Nodes.Defaults
 		spec.DataDisks = append([]Disk(nil), spec.DataDisks...)
 		if o, ok := c.Nodes.Overrides[name]; ok {
@@ -303,14 +331,28 @@ func NodeIP(cidr string, n int) (netip.Addr, int, error) {
 	return a, p.Bits(), nil
 }
 
-// CorosyncNetwork returns the network carrying corosync.
-func (c *Cluster) CorosyncNetwork() Network {
+// CorosyncNetworks returns the networks for corosync link0 and (optionally) link1.
+func (c *Cluster) CorosyncNetworks() []Network {
+	var out []Network
 	for _, n := range c.Networks {
-		if n.Corosync {
-			return n
+		if n.Has(RoleCorosync) {
+			out = append(out, n)
 		}
 	}
-	return c.Networks[0]
+	return out
+}
+
+// CorosyncNetwork returns the link0 network; node names resolve to it.
+func (c *Cluster) CorosyncNetwork() Network { return c.CorosyncNetworks()[0] }
+
+// RoleNetwork returns the network with a role, if any.
+func (c *Cluster) RoleNetwork(role string) (Network, bool) {
+	for _, n := range c.Networks {
+		if n.Has(role) {
+			return n, true
+		}
+	}
+	return Network{}, false
 }
 
 // Validate checks a defaulted config and returns all problems at once.
@@ -333,7 +375,7 @@ func (c *Cluster) Validate() error {
 	if !strings.HasPrefix(c.Proxmox.Mirror, "https://") && !strings.HasPrefix(c.Proxmox.Mirror, "http://") {
 		add("proxmox.mirror: must be an http(s) URL")
 	}
-	if c.Nodes.Count < 1 || c.Nodes.Count > 16 {
+	if c.Nodes.Count < 1 || c.Nodes.Count > 16 || c.MaxNodeIndex() > 32 {
 		add("nodes.count: must be between 1 and 16")
 	}
 	if !strings.Contains(c.Nodes.NamePattern, "{n}") {
@@ -404,7 +446,7 @@ func (c *Cluster) Validate() error {
 		add("networks: at most 8")
 	}
 	seen := map[string]bool{}
-	corosync := 0
+	roles := map[string]int{}
 	var prefixes []netip.Prefix
 	for i, n := range c.Networks {
 		p := fmt.Sprintf("networks[%d] (%s): ", i, n.Name)
@@ -421,15 +463,34 @@ func (c *Cluster) Validate() error {
 		if n.MTU != 0 && (n.MTU < 576 || n.MTU > 9000) {
 			add("%smtu must be between 576 and 9000", p)
 		}
-		if n.Corosync {
-			corosync++
+		for _, r := range n.Roles {
+			switch r {
+			case RoleCorosync, RoleCephPublic, RoleCephCluster, RoleMigration:
+				roles[r]++
+			default:
+				add("%sunknown role %q", p, r)
+			}
+		}
+		if len(n.VLANs) > 0 && !n.VLANAware {
+			add("%svlans need vlanAware: true", p)
+		}
+		for _, v := range n.VLANs {
+			if !vlanRe.MatchString(v) {
+				add("%svlan %q must be an ID or range like 100 or 200-299", p, v)
+			}
+		}
+		if n.CIDR == "" {
+			if len(n.Roles) > 0 {
+				add("%sroles need a cidr (L2-only networks have no node addresses)", p)
+			}
+			continue
 		}
 		pfx, err := netip.ParsePrefix(n.CIDR)
 		if err != nil || !pfx.Addr().Is4() {
 			add("%scidr %q must be an IPv4 prefix", p, n.CIDR)
 			continue
 		}
-		if _, _, err := NodeIP(n.CIDR, c.Nodes.Count); err != nil {
+		if _, _, err := NodeIP(n.CIDR, c.MaxNodeIndex()); err != nil {
 			add("%s%v", p, err)
 		}
 		if pfx.Overlaps(netip.MustParsePrefix("10.0.2.0/24")) {
@@ -442,8 +503,16 @@ func (c *Cluster) Validate() error {
 		}
 		prefixes = append(prefixes, pfx)
 	}
-	if corosync != 1 {
-		add("networks: exactly one network must have corosync: true")
+	if roles[RoleCorosync] < 1 || roles[RoleCorosync] > 2 {
+		add("networks: one or two networks need the corosync role (link0, link1)")
+	}
+	for _, r := range []string{RoleCephPublic, RoleCephCluster, RoleMigration} {
+		if roles[r] > 1 {
+			add("networks: role %s is assigned more than once", r)
+		}
+	}
+	if (roles[RoleCephPublic] > 0 || roles[RoleCephCluster] > 0) && !c.CephEnabled() {
+		add("networks: ceph roles are set but storage.ceph is not enabled")
 	}
 
 	pools := map[string]bool{}
@@ -477,8 +546,13 @@ func (c *Cluster) Validate() error {
 		errs = append(errs, c.validateCeph(used)...)
 	}
 
-	if c.Access.PortBase < 1024 || c.Access.PortBase+100+c.Nodes.Count > 65535 {
-		add("access.portBase: must be between 1024 and %d", 65535-100-c.Nodes.Count)
+	if c.Access.PortBase < 1024 || c.Access.PortBase+100+c.MaxNodeIndex() > 65535 {
+		add("access.portBase: must be between 1024 and %d", 65535-100-c.MaxNodeIndex())
+	}
+	for _, r := range c.Nodes.Removed {
+		if r < 1 || r > c.MaxNodeIndex() {
+			add("nodes.removed: %d is not a node number", r)
+		}
 	}
 	return errors.Join(errs...)
 }

@@ -140,6 +140,7 @@ func (c *Cluster) cleanSockets(n config.Node) {
 		_ = os.Remove(c.nodeSock(n, net.Name))
 	}
 	_ = os.Remove(c.qmp(n))
+	_ = os.Remove(c.Dir.Run(n.Name + "-console.sock"))
 	_ = os.Remove(c.Dir.Run(n.Name + "-serial.sock"))
 }
 

@@ -28,6 +28,7 @@ func Execute() int {
 		SilenceErrors: true,
 	}
 	root.AddCommand(createCmd(), listCmd(), statusCmd(), startCmd(), stopCmd(), destroyCmd(),
+		nodeCmd(), snapshotCmd(), sshCmd(), consoleCmd(),
 		envCmd(), doctorCmd(), configCmd(), versionCmd(), switchCmd())
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)

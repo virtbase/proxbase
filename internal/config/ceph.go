@@ -10,9 +10,6 @@ func (c *Cluster) setCephDefaults() {
 	if ce.Version == "" {
 		ce.Version = "squid"
 	}
-	if ce.Network == "" {
-		ce.Network = c.CorosyncNetwork().Name
-	}
 	if ce.OSDDisks == nil {
 		for i := range c.Nodes.Defaults.DataDisks {
 			dev := DataDiskDevice(i)
@@ -44,14 +41,17 @@ func (c *Cluster) setCephDefaults() {
 	}
 }
 
-// CephNetwork returns the network carrying Ceph traffic.
-func (c *Cluster) CephNetwork() Network {
-	for _, n := range c.Networks {
-		if n.Name == c.Storage.Ceph.Network {
-			return n
-		}
+// CephNetworks returns the Ceph public and cluster networks: the networks with
+// the ceph-public and ceph-cluster roles, falling back to corosync link0 and public.
+func (c *Cluster) CephNetworks() (public, cluster Network) {
+	public, ok := c.RoleNetwork(RoleCephPublic)
+	if !ok {
+		public = c.CorosyncNetwork()
 	}
-	return c.CorosyncNetwork()
+	if cluster, ok = c.RoleNetwork(RoleCephCluster); !ok {
+		cluster = public
+	}
+	return public, cluster
 }
 
 // CephFSSize is the replication of the CephFS pools: that of the first pool.
@@ -75,9 +75,6 @@ func (c *Cluster) validateCeph(zfsDisks map[string]string) []error {
 	ce := c.Storage.Ceph
 	if ce.Version != "squid" && ce.Version != "tentacle" {
 		add("version %q must be squid or tentacle", ce.Version)
-	}
-	if !slices.ContainsFunc(c.Networks, func(n Network) bool { return n.Name == ce.Network }) {
-		add("network %q is not defined in networks", ce.Network)
 	}
 	if len(ce.OSDDisks) == 0 {
 		add("no OSD disks (add nodes.defaults.dataDisks)")
@@ -116,6 +113,11 @@ func (c *Cluster) validateCeph(zfsDisks map[string]string) []error {
 func (c *Cluster) Warnings() []string {
 	var out []string
 	if c.CephEnabled() {
+		for _, p := range c.Storage.Ceph.Pools {
+			if p.Size == 2 && p.MinSize == 2 {
+				out = append(out, fmt.Sprintf("ceph pool %s has size 2 and minSize 2: I/O stops while one node is down", p.Name))
+			}
+		}
 		for _, n := range c.NodeList() {
 			if mem, err := MemoryMiB(n.Spec.Memory); err == nil && mem < 6144 {
 				out = append(out, fmt.Sprintf("node %s has %s memory; Ceph (mon, mgr, mds, OSD) wants at least 6G", n.Name, n.Spec.Memory))

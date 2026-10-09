@@ -32,6 +32,22 @@ type State struct {
 	ReadyAt   *time.Time   `json:"readyAt,omitempty"`
 	Duration  string       `json:"createDuration,omitempty"`
 	Nodes     []*NodeState `json:"nodes"`
+	Snapshots []Snapshot   `json:"snapshots,omitempty"`
+}
+
+type Snapshot struct {
+	Name    string    `json:"name"`
+	Created time.Time `json:"created"`
+	Nodes   []string  `json:"nodes"`
+}
+
+func (s *State) Snapshot(name string) *Snapshot {
+	for i := range s.Snapshots {
+		if s.Snapshots[i].Name == name {
+			return &s.Snapshots[i]
+		}
+	}
+	return nil
 }
 
 type NodeState struct {

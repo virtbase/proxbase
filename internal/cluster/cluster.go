@@ -145,17 +145,18 @@ func (c *Cluster) machine(n config.Node) *qemu.Machine {
 	mem, _ := config.MemoryMiB(n.Spec.Memory)
 	ns := c.St.Node(n.Name)
 	m := &qemu.Machine{
-		Name:      c.Cfg.Name + "-" + n.Name,
-		CPUs:      n.Spec.CPUs,
-		MemoryMiB: mem,
-		Nested:    *n.Spec.Nested,
-		RootDisk:  c.rootDisk(n),
-		NATMAC:    qemu.MAC(n.Index, 0),
-		UIPort:    ns.UIPort,
-		SSHPort:   ns.SSHPort,
-		QMP:       c.qmp(n),
-		PIDFile:   c.pidfile(n),
-		Console:   c.Dir.Log(n.Name + "-console.log"),
+		Name:       c.Cfg.Name + "-" + n.Name,
+		CPUs:       n.Spec.CPUs,
+		MemoryMiB:  mem,
+		Nested:     *n.Spec.Nested,
+		RootDisk:   c.rootDisk(n),
+		NATMAC:     qemu.MAC(n.Index, 0),
+		UIPort:     ns.UIPort,
+		SSHPort:    ns.SSHPort,
+		QMP:        c.qmp(n),
+		PIDFile:    c.pidfile(n),
+		Console:    c.Dir.Run(n.Name + "-console.sock"),
+		ConsoleLog: c.Dir.Log(n.Name + "-console.log"),
 	}
 	for i := range n.Spec.DataDisks {
 		m.DataDisks = append(m.DataDisks, c.dataDisk(n, i))

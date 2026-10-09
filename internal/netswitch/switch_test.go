@@ -98,6 +98,15 @@ func TestSwitch(t *testing.T) {
 		t.Fatal("frame from unknown peer forwarded")
 	}
 
+	// Peers can be replaced at runtime: without c, a's broadcast only reaches b.
+	sw.SetPeers(paths[:2])
+	f = frame(bcast, peers[0].mac, "two peers")
+	_, _ = peers[0].conn.Write(f)
+	if peers[1].recv(t) == nil || peers[2].recv(t) != nil {
+		t.Fatal("SetPeers not applied")
+	}
+	sw.SetPeers(paths)
+
 	// A peer that went away does not block delivery to the others.
 	peers[2].conn.Close()
 	f = frame(bcast, peers[0].mac, "after close")

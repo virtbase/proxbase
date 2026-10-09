@@ -21,7 +21,7 @@ virtio-blk-pci,drive=root,bus=pcie.0,addr=0x2,bootindex=1
 -device
 qemu-xhci,id=usb,bus=pcie.0,addr=0x3
 -netdev
-user,id=nat,hostfwd=tcp:127.0.0.1:18101-:22,hostfwd=tcp:127.0.0.1:18001-:8006
+user,id=nat,dhcpstart=10.0.2.100,hostfwd=tcp:127.0.0.1:18101-10.0.2.15:22,hostfwd=tcp:127.0.0.1:18001-10.0.2.15:8006
 -device
 virtio-net-pci,netdev=nat,mac=52:54:00:50:01:00,bus=pcie.0,addr=0x4
 -netdev

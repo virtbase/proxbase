@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/netswitch"
 	"github.com/virtbase/proxbase/internal/state"
 )
@@ -72,6 +73,15 @@ func (c *Cluster) startSwitch() error {
 	return fmt.Errorf("switch did not start, see %s", c.Dir.Log("switch.log"))
 }
 
+// reloadSwitch makes a running switch pick up added or removed nodes.
+func (c *Cluster) reloadSwitch() error {
+	pid, ok := c.switchPID()
+	if !ok {
+		return c.startSwitch()
+	}
+	return syscall.Kill(pid, syscall.SIGHUP)
+}
+
 func (c *Cluster) stopSwitch() error {
 	pid, ok := c.switchPID()
 	if !ok {
@@ -97,19 +107,40 @@ func RunSwitch(name string) error {
 	c := &Cluster{Dir: d, Cfg: cfg}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	errc := make(chan error, len(cfg.Networks))
-	for _, net := range cfg.Networks {
-		var peers []string
+	peers := func(cfg *config.Cluster, net string) []string {
+		var out []string
 		for _, n := range cfg.NodeList() {
-			peers = append(peers, c.nodeSock(n, net.Name))
+			out = append(out, c.nodeSock(n, net))
 		}
-		sw, err := netswitch.Listen(c.switchSock(net.Name), peers)
+		return out
+	}
+	errc := make(chan error, len(cfg.Networks))
+	switches := map[string]*netswitch.Switch{}
+	for _, net := range cfg.Networks {
+		sw, err := netswitch.Listen(c.switchSock(net.Name), peers(cfg, net.Name))
 		if err != nil {
 			return err
 		}
 		defer sw.Close()
+		switches[net.Name] = sw
 		go func() { errc <- sw.Serve(ctx) }()
 	}
+	// SIGHUP: nodes were added or removed; reload the peer lists.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			cfg, err := d.LoadConfig()
+			if err != nil {
+				fmt.Println("reload:", err)
+				continue
+			}
+			for name, sw := range switches {
+				sw.SetPeers(peers(cfg, name))
+			}
+			fmt.Printf("%s reloaded: %d nodes\n", time.Now().Format(time.RFC3339), cfg.Nodes.Count)
+		}
+	}()
 	if err := state.WriteFileAtomic(d.Run("switch.pid"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil {
 		return err
 	}

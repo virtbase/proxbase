@@ -51,21 +51,26 @@ func (c *Cluster) setupCeph(ctx context.Context) error {
 	_, missing := s.Run("test -e /etc/pve/ceph.conf")
 	s.Close()
 	if missing != nil {
-		net := c.Cfg.CephNetwork()
+		public, cluster := c.Cfg.CephNetworks()
 		size, minSize := c.Cfg.CephFSSize()
-		c.step("ceph: init (network %s %s)", net.Name, net.CIDR)
-		form := url.Values{"network": {net.CIDR}, "size": {strconv.Itoa(size)}, "min_size": {strconv.Itoa(minSize)}}
+		c.step("ceph: init (public %s %s, cluster %s %s)", public.Name, public.CIDR, cluster.Name, cluster.CIDR)
+		form := url.Values{"network": {public.CIDR}, "cluster-network": {cluster.CIDR}, "size": {strconv.Itoa(size)}, "min_size": {strconv.Itoa(minSize)}}
 		if err := api.Post(ctx, "/nodes/"+first+"/ceph/init", form, nil); err != nil {
 			return fmt.Errorf("ceph init: %w", err)
 		}
 	}
 
-	// Monitors on the first three nodes, managers on every node; one at a time.
-	for i, n := range nodes {
-		if i < 3 {
+	// Three monitors (fewer on smaller clusters), a manager on every node; one at a time.
+	var mons []named
+	if err := retry(ctx, func() error { return api.Get(ctx, "/nodes/"+first+"/ceph/mon", &mons) }); err != nil {
+		return fmt.Errorf("list ceph mon: %w", err)
+	}
+	for _, n := range nodes {
+		if !hasName(mons, n.Name) && len(mons) < 3 {
 			if err := c.cephDaemon(ctx, apis[n.Name], api, n.Name, "mon"); err != nil {
 				return err
 			}
+			mons = append(mons, named{Name: n.Name})
 		}
 		if err := c.cephDaemon(ctx, apis[n.Name], api, n.Name, "mgr"); err != nil {
 			return err
@@ -99,7 +104,7 @@ func (c *Cluster) setupCeph(ctx context.Context) error {
 func (c *Cluster) installCeph(ctx context.Context, version string) error {
 	// Ceph keys since 19.2.6 (aes256k) are rejected by the libpve-storage-perl on
 	// the 9.2 ISO ("Not a proper rbd authentication file"); newer versions accept them.
-	script := fmt.Sprintf(`
+	script := aptWait + fmt.Sprintf(`
 export DEBIAN_FRONTEND=noninteractive
 log=/var/log/proxbase-ceph-install.log
 if ! [ -x /usr/bin/ceph-mon ] || ! ceph-mon --version 2>/dev/null | grep -q ' %[1]s '; then
@@ -109,7 +114,7 @@ if ! [ -x /usr/bin/ceph-mon ] || ! ceph-mon --version 2>/dev/null | grep -q ' %[
 	echo installed
 fi
 before=$(dpkg-query -W -f '${Version}' libpve-storage-perl)
-if ! apt-get install -y --only-upgrade libpve-storage-perl >>$log 2>&1; then
+if ! $apt install -y --only-upgrade libpve-storage-perl >>$log 2>&1; then
 	tail -n 20 $log >&2; exit 1
 fi
 if [ "$before" != "$(dpkg-query -W -f '${Version}' libpve-storage-perl)" ]; then
@@ -312,6 +317,11 @@ type cephStatus struct {
 		Status string                    `json:"status"`
 		Checks map[string]map[string]any `json:"checks"`
 	} `json:"health"`
+	OSDMap struct {
+		Num int `json:"num_osds"`
+		Up  int `json:"num_up_osds"`
+		In  int `json:"num_in_osds"`
+	} `json:"osdmap"`
 	PGMap struct {
 		NumPGs  int `json:"num_pgs"`
 		ByState []struct {
@@ -321,9 +331,12 @@ type cephStatus struct {
 	} `json:"pgmap"`
 }
 
-// settled reports HEALTH_OK with every placement group active+clean (new pools
-// are still peering while health already says OK).
+// settled reports HEALTH_OK, every OSD up and in, and every placement group
+// active+clean (new pools and OSDs settle while health already says OK).
 func (s cephStatus) settled() bool {
+	if s.OSDMap.Up != s.OSDMap.Num || s.OSDMap.In != s.OSDMap.Num {
+		return false
+	}
 	clean := 0
 	for _, st := range s.PGMap.ByState {
 		if st.Name == "active+clean" {
@@ -388,7 +401,7 @@ func (c *Cluster) waitCephHealth(ctx context.Context, timeout time.Duration) err
 		err := api.Get(ctx, "/cluster/ceph/status", &last)
 		if err == nil && last.settled() {
 			if err = c.storagesActive(ctx, api); err == nil {
-				c.step("ceph: HEALTH_OK, %d PGs active+clean, storages active on all nodes", last.PGMap.NumPGs)
+				c.step("ceph: HEALTH_OK, %d OSDs up, %d PGs active+clean, storages active on all nodes", last.OSDMap.Num, last.PGMap.NumPGs)
 				return nil
 			}
 		}
