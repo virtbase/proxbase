@@ -1,0 +1,21 @@
+[global]
+keyboard = "de"
+country = "de"
+fqdn = "pve1.lab.internal"
+mailto = "root@lab.internal"
+timezone = "Europe/Berlin"
+root-password = "pa\"ss\\"
+root-ssh-keys = ["ssh-ed25519 AAAA proxbase"]
+reboot-mode = "power-off"
+
+[network]
+source = "from-answer"
+cidr = "10.0.2.15/24"
+gateway = "10.0.2.2"
+dns = "10.0.2.3"
+filter.ID_NET_NAME_MAC = "*525400000100"
+
+[disk-setup]
+filesystem = "zfs"
+disk-list = ["vda"]
+zfs.raid = "raid0"

@@ -1,0 +1,7 @@
+/bin/
+/dist/
+/.tools/
+/.spike
+*.test
+*.out
+coverage.txt

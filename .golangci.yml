@@ -1,0 +1,32 @@
+version: "2"
+linters:
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - revive
+    - unconvert
+  exclusions:
+    presets:
+      - std-error-handling # unchecked Close, Remove, Fprintf
+  settings:
+    gosec:
+      excludes:
+        - G101 # secret file names, not secrets
+        - G104 # duplicate of errcheck
+        - G204 # we run qemu with computed arguments by design
+        - G304 # file paths come from our own state directory
+        - G301 # state and cache directories are not secret; secrets/ is 0700
+        - G302 # logs and lock files are not secret
+        - G306 # world-readable non-secret files are intended
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+formatters:
+  enable:
+    - gofmt
+    - goimports
