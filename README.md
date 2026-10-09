@@ -1,148 +1,127 @@
 # Proxbase
 
-Proxbase creates Proxmox VE clusters out of QEMU/KVM virtual machines on one Linux
-host, for labs, demos and CI. Each node is a real VM installed from the official ISO
-with the Proxmox automated installer, then joined into a cluster through the
-Proxmox API.
+[![CI](https://github.com/virtbase/proxbase/actions/workflows/ci.yml/badge.svg)](https://github.com/virtbase/proxbase/actions/workflows/ci.yml)
+[![Go version](https://img.shields.io/github/go-mod/go-version/virtbase/proxbase)](go.mod)
+[![License](https://img.shields.io/github/license/virtbase/proxbase)](LICENSE)
+
+**Real Proxmox VE clusters on your Linux machine in about three minutes, for labs,
+demos and CI.**
+
+Proxbase starts every node as a QEMU/KVM virtual machine, installs it from the
+official Proxmox VE ISO with the automated installer, and joins the nodes into a
+cluster through the Proxmox API, with ZFS or Ceph storage, internal networks and an
+API token ready for Terraform or Ansible. No root, no Docker, no manual clicks.
+
+```console
+$ proxbase create lab --nodes 3
+…
+created in 2m56s
+Cluster lab: ready, quorate: yes, switch: running
+NODE  VM       CLUSTER  IP           WEB UI                   SSH
+pve1  running  online   10.10.10.11  https://127.0.0.1:18001  127.0.0.1:18101
+pve2  running  online   10.10.10.12  https://127.0.0.1:18002  127.0.0.1:18102
+pve3  running  online   10.10.10.13  https://127.0.0.1:18003  127.0.0.1:18103
+```
+
+## Features
+
+- **Real nodes:** each node is a VM with its own kernel installed from the stock ISO;
+  nested virtualization lets you run guests inside the cluster.
+- **Storage:** ZFS pools per node, or hyperconverged Ceph (RBD and CephFS) that waits
+  for `HEALTH_OK`.
+- **Networking without root:** several internal networks with roles (corosync
+  link0/link1, Ceph public/cluster, migration), VLAN-aware and L2-only bridges, jumbo
+  frames.
+- **Lifecycle:** start/stop, add and remove nodes (with Ceph draining), consistent
+  snapshots of the whole cluster, resumable creates.
+- **Fault injection:** power loss, hung nodes, pulled cables, network partitions,
+  latency and loss, to test HA, fencing and Ceph recovery.
+- **Ready for automation:** API token and CA export, `proxbase env` for shells, JSON
+  and the bpg/proxmox Terraform provider, `-o json` for scripts.
+- **Fast:** `--golden` clones nodes from a cached base image: a 3-node cluster in
+  about 1.5 minutes, with a unique identity per node.
+- **Declarative:** one YAML file with a JSON schema; every flag overrides a field.
+- **Docker Compose:** `proxbase up` runs a cluster in the foreground with clean
+  shutdown and a health check.
+
+## Quick start
+
+Requirements: Linux on amd64 with `/dev/kvm`, QEMU 7.2+ (`qemu-system-x86_64`,
+`qemu-img`) and about 4 GiB RAM per node. Nested virtualization is needed for guests
+inside the nodes.
 
 ```bash
+go install github.com/virtbase/proxbase/cmd/proxbase@latest   # or see docs/install.md
+proxbase doctor                                               # checks KVM, QEMU, memory, ports
 proxbase create lab --nodes 3
-proxbase status lab
-eval "$(proxbase env lab)"
-proxbase stop lab && proxbase start lab
-proxbase destroy lab --yes
 ```
 
-## Status
-
-Early development (milestone M4). Tested on Debian 13 with QEMU 10.0 on an AMD host.
-What works today:
-
-- Unattended install of Proxmox VE 9.2 from the stock ISO (no root, no Docker)
-- N-node cluster with corosync on an internal network, joined via the API
-- ZFS root and a ZFS data pool per node, registered as cluster storage
-- Ceph (`--storage ceph`): mon on the first three nodes, mgr and MDS on every node,
-  one OSD per data disk, an RBD pool `ceph-vm` and CephFS `cephfs` for ISOs,
-  templates, backups and snippets; `create` waits for `HEALTH_OK`
-- API token `proxbase@pve!api` and CA export; `env` output for shells, JSON and the
-  [bpg/proxmox](https://registry.terraform.io/providers/bpg/proxmox) Terraform provider
-- Several internal networks with roles (corosync link0/link1, Ceph public/cluster,
-  migration), VLAN-aware and L2-only bridges, jumbo frames
-- `node add` / `node remove`, snapshots of stopped clusters, `ssh`, `console`
-- `create` is resumable: re-run it after a failure
-
-- Docker image and Compose example (`proxbase up` runs in the foreground)
-
-Not yet: bridge networking ([design](docs/bridge-mode.md)), release pipeline, macOS. Interfaces and
-the file format may change without notice until v0.1.0.
-
-## Requirements
-
-- Linux on amd64 with `/dev/kvm` access; nested virtualization for guests inside nodes
-- QEMU 7.2 or newer (`qemu-system-x86_64`, `qemu-img`)
-- About 4 GiB RAM and 4 GiB disk per node, plus 1.7 GiB for the ISO cache
-
-`proxbase doctor` checks all of this.
-
-## How it works
-
-- The ISO and `SHA256SUMS` come from `proxmox.mirror` (default
-  `https://enterprise.proxmox.com/iso`) and are cached in `~/.cache/proxbase`.
-- Each node boots the installer kernel directly with an answer file on a virtual FAT
-  disk labelled `PROXMOX-AIS`; Proxbase answers the installer over the serial console.
-- Every node has a NAT NIC (`vmbr0`) with the web UI and SSH forwarded to
-  `127.0.0.1`, and one NIC per configured network. Networks are rootless: a small
-  switch process per cluster connects the nodes over unix datagram sockets.
-- All state lives in `~/.local/share/proxbase/clusters/<name>/` (disks, sockets,
-  logs, generated root password and SSH key). `destroy` deletes that directory.
-
-Node `pveN` gets web UI `https://127.0.0.1:18000+N`, SSH `127.0.0.1:18100+N` and
-address `.1N` (e.g. `10.10.10.11`) on each internal network.
-
-## Ceph
+Then open `https://127.0.0.1:18001` (user `root`, password from `proxbase env lab`), or:
 
 ```bash
-proxbase create ceph --nodes 3 --storage ceph
+proxbase ssh lab pve2 -- pvecm status
+eval "$(proxbase env lab)"            # PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN, …
+proxbase destroy lab --yes            # removes everything
 ```
 
-Defaults: Ceph Squid from the no-subscription repository, 6G memory per node, one
-32G data disk per node as OSD, pool `ceph-vm` (size 3, min 2, 32 PGs, autoscaler off).
-The 9.2 ISO's storage library rejects keys of current Ceph releases, so Proxbase
-upgrades `libpve-storage-perl` (and its dependencies) on the nodes when it installs Ceph.
-Fewer than three nodes work if you lower `storage.ceph.pools[].size`.
-
-## Networks
-
-`vmbr0` on every node is the NAT uplink (QEMU user networking): node internet, the
-forwarded web UI and SSH, and internet for guests bridged to `vmbr0` (they get DHCP
-leases from `10.0.2.100` on). Each entry in `networks` adds a NIC, a bridge and an
-address `.1N` on node N. Roles decide what runs where:
-
-| Role | Effect |
-| --- | --- |
-| `corosync` | corosync link0 (first network with the role) and link1 (second); node names resolve to link0 |
-| `ceph-public` / `ceph-cluster` | Ceph public and replication networks (default: corosync link0) |
-| `migration` | network for live migration (`datacenter.cfg`) |
-
-Networks without `cidr` are L2 only (bridge without node addresses), typically
-`vlanAware` with a `vlans` list for guests. See [examples/networks.yaml](examples/networks.yaml).
-
-## Lifecycle
+## Usage
 
 ```bash
-proxbase node add lab --count 1      # install, join, ZFS pool / Ceph OSD as configured
-proxbase node remove lab pve4        # drain Ceph OSDs, remove daemons, delnode, delete VM
+proxbase create ceph --nodes 3 --storage ceph       # hyperconverged Ceph
+proxbase create fast --nodes 3 --golden             # clone from a cached base image
+proxbase create -f examples/networks.yaml           # separate networks and VLANs
+proxbase node add lab --count 1                     # grow the cluster
+proxbase node remove lab pve2                       # shrink it again
 proxbase stop lab && proxbase snapshot save lab base
 proxbase snapshot restore lab base && proxbase start lab
-proxbase ssh lab pve2 -- pveversion
-proxbase console lab pve1            # serial console, Ctrl-] to detach
+proxbase env lab --format terraform                 # provider block for bpg/proxmox
+proxbase fault partition lab pve3                   # isolate a node, then: fault clear
+proxbase status lab --check                         # exit code for CI and health checks
 ```
 
-Removed nodes keep their number (`nodes.removed`), so the other nodes keep their
-addresses and ports; `node add` reuses the lowest free number. Snapshots are internal
-qcow2 snapshots of every disk, taken while all nodes are stopped.
-`proxmox.upgrade: true` runs `apt dist-upgrade` on every node before clustering.
+A cluster file looks like this (everything has a default):
 
-## Docker
-
-```bash
-cd examples/compose
-echo "KVM_GID=$(getent group kvm | cut -d: -f3)" > .env
-docker compose up -d                 # builds the image, creates the cluster
-docker compose exec proxbase proxbase status
-docker compose down                  # shuts the nodes down cleanly; -v deletes the cluster
+```yaml
+apiVersion: proxbase.dev/v1alpha1
+kind: Cluster
+name: lab
+nodes:
+  count: 3
+  defaults: {cpus: 4, memory: 4G, dataDisks: [{size: 32G}]}
+networks:
+  - {name: cluster, cidr: 10.10.10.0/24, roles: [corosync]}
+storage:
+  zfs: [{name: tank, raid: single}]
 ```
 
-The container runs `proxbase up`: it creates the cluster (or resumes a failed create, or
-starts the existing one from the `/data` volume), waits, and shuts all nodes down on
-SIGTERM, so give it a `stop_grace_period` of a few minutes. `proxbase status --check` is
-the health check. The forwards listen on `0.0.0.0` inside the container
-(`PROXBASE_BIND_ADDRESS`); the example publishes them on the host's `127.0.0.1` only.
-No `privileged` or extra capabilities are needed, only `/dev/kvm` and its group.
+## Documentation
 
-Limits: this needs a Linux host with KVM, and nested virtualization for guests inside
-the nodes. Docker Desktop on macOS and Windows has no `/dev/kvm`, so it does not work
-there. Plan for 4 GiB RAM per node (6 GiB with Ceph) plus about 15 GiB in the volume
-for a 3-node cluster. The paths printed by `proxbase env` are container paths; copy the
-key or CA out with `docker compose exec proxbase cat <path>`.
+| Topic | |
+| --- | --- |
+| [Getting started](docs/getting-started.md) | First cluster, web UI, credentials |
+| [Installation](docs/install.md) | Packages, Homebrew, container image, verifying releases |
+| [Configuration](docs/configuration.md) | Every field, default and limit |
+| [Networking](docs/networking.md) · [Storage](docs/storage.md) · [Lifecycle](docs/lifecycle.md) | How it works and what to expect |
+| [Fault injection](docs/fault-injection.md) · [Golden images](docs/golden-images.md) | Breaking the cluster on purpose, faster creates |
+| [Docker](docs/docker.md) · [CLI reference](docs/cli.md) · [Troubleshooting](docs/troubleshooting.md) | |
+| [Architecture](docs/architecture.md) | Packages, create flow, state on disk |
+| [Examples](examples/) | Ready-to-use cluster files for common setups |
 
-## Configuration
+## Status and limits
 
-Everything has a default; flags override fields of the file.
+Proxbase is young; the file format may change before v0.1.0. It is tested with
+Proxmox VE 9.2 on Debian 13 (QEMU 10.0, AMD). Clusters need a Linux host with KVM:
+macOS builds are experimental and Docker Desktop has no `/dev/kvm`. Nodes are
+reachable from the host through forwarded ports on `127.0.0.1`; host-reachable bridge
+networking is [designed](docs/bridge-mode.md) but not implemented. Proxbase builds
+labs: it stores generated passwords and keys unencrypted in its state directory.
 
-```bash
-proxbase config init cluster.yaml   # annotated example
-proxbase config schema > cluster.schema.json
-proxbase create -f cluster.yaml --nodes 5
-proxbase create lab --dry-run       # print the resolved file
-```
+## Contributing
 
-## Development
-
-```bash
-make build test lint
-```
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[code of conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)

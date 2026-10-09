@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -235,5 +236,24 @@ func TestBindAddress(t *testing.T) {
 	}
 	if err := load(t, "access: {bindAddress: localhost}\n").Validate(); err == nil || !strings.Contains(err.Error(), "IPv4 address") {
 		t.Fatalf("want bind address error, got %v", err)
+	}
+}
+
+func TestExamples(t *testing.T) {
+	files, _ := filepath.Glob("../../examples/*.yaml")
+	files = append(files, "../../examples/compose/cluster.yaml")
+	if len(files) < 5 {
+		t.Fatalf("found only %d example files", len(files))
+	}
+	for _, f := range files {
+		c, err := Load(f)
+		if err != nil {
+			t.Errorf("%s: %v", f, err)
+			continue
+		}
+		c.SetDefaults()
+		if err := c.Validate(); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
 	}
 }

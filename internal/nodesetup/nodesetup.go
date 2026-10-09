@@ -1,26 +1,30 @@
-package cluster
+// Package nodesetup generates the shell scripts that prepare installed nodes:
+// host names, repositories, bridges for the internal networks and upgrades.
+package nodesetup
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/virtbase/proxbase/internal/config"
-	"github.com/virtbase/proxbase/internal/qemu"
+	"github.com/virtbase/proxbase/internal/vm"
 )
 
-// postInstallScript makes a fresh node cluster-ready. It is idempotent and
-// prints "changed" when it modified the network configuration.
-func (c *Cluster) postInstallScript(n config.Node) string {
+// Script makes node n cluster-ready. It is idempotent and prints "changed" when
+// it modified the network configuration.
+func Script(cfg *config.Cluster, n config.Node) string {
 	var hosts, nics, ifaces strings.Builder
-	for _, o := range c.Cfg.NodeList() {
-		fmt.Fprintf(&hosts, "%s %s.%s %s\n", c.corosyncIP(o), o.Name, c.Cfg.Proxmox.Domain, o.Name)
+	link0 := cfg.CorosyncNetwork()
+	for _, o := range cfg.NodeList() {
+		ip, _, _ := config.NodeIP(link0.CIDR, o.Index)
+		fmt.Fprintf(&hosts, "%s %s.%s %s\n", ip, o.Name, cfg.Proxmox.Domain, o.Name)
 	}
-	for i, net := range c.Cfg.Networks {
+	for i, net := range cfg.Networks {
 		mtu := ""
 		if net.MTU != 0 {
 			mtu = fmt.Sprintf("\tmtu %d\n", net.MTU)
 		}
-		fmt.Fprintf(&nics, "nic%d=$(ifname %s)\n", i, qemu.MAC(n.Index, i+1))
+		fmt.Fprintf(&nics, "nic%d=$(ifname %s)\n", i, vm.MAC(n.Index, i+1))
 		fmt.Fprintf(&ifaces, "auto $nic%d\niface $nic%d inet manual\n%s\n", i, i, mtu)
 		if net.CIDR == "" {
 			fmt.Fprintf(&ifaces, "auto %s\niface %s inet manual\n", net.Bridge, net.Bridge)
@@ -88,14 +92,16 @@ fi
 `, hosts.String(), nics.String(), ifaces.String())
 }
 
-// aptWait waits for apt runs started by PVE itself (pveupdate right after boot).
-const aptWait = `
+// AptWait waits for apt runs started by PVE itself (pveupdate right after boot)
+// and sets $apt to an apt-get that waits for locks and retries downloads.
+const AptWait = `
 for i in $(seq 300); do pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null || break; sleep 2; done
 apt='apt-get -o DPkg::Lock::Timeout=600 -o Acquire::Retries=3'
 `
 
-// upgradeScript brings a node to the newest no-subscription packages.
-const upgradeScript = aptWait + `
+// Upgrade brings a node to the newest no-subscription packages and prints the
+// apt summary line.
+const Upgrade = AptWait + `
 export DEBIAN_FRONTEND=noninteractive
 log=/var/log/proxbase-upgrade.log
 if ! { $apt update && $apt -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade; } >$log 2>&1; then
@@ -103,3 +109,14 @@ if ! { $apt update && $apt -y -o Dpkg::Options::=--force-confdef -o Dpkg::Option
 fi
 grep -E '^[0-9]+ upgraded' $log || true
 `
+
+// PendingKernel prints "<kernel> <boot id>" if the newest installed kernel is
+// not the running one, and nothing otherwise.
+const PendingKernel = `new=$(ls /boot/vmlinuz-* | sed 's#^/boot/vmlinuz-##' | sort -V | tail -n 1)
+if [ "$new" != "$(uname -r)" ]; then echo "$new $(cat /proc/sys/kernel/random/boot_id)"; fi`
+
+// Reboot reboots two seconds later, so the SSH session can end cleanly.
+const Reboot = "systemd-run --on-active=2 systemctl reboot >/dev/null"
+
+// BootID prints the boot ID and the running kernel.
+const BootID = "cat /proc/sys/kernel/random/boot_id; uname -r"

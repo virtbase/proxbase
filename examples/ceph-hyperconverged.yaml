@@ -1,0 +1,33 @@
+# Hyperconverged Ceph on three nodes: two OSDs per node, an RBD pool for guests and
+# CephFS for ISOs, templates, backups and snippets. Ceph traffic on its own network.
+# Needs about 18 GiB RAM on the host. About 5 minutes.
+#   proxbase create -f examples/ceph-hyperconverged.yaml
+apiVersion: proxbase.dev/v1alpha1
+kind: Cluster
+name: ceph
+nodes:
+  count: 3
+  defaults:
+    cpus: 4
+    memory: 6G
+    dataDisks:
+      - size: 32G
+      - size: 32G
+networks:
+  - name: cluster
+    cidr: 10.10.10.0/24
+    roles: [corosync, migration]
+  - name: ceph
+    cidr: 10.10.30.0/24
+    mtu: 9000
+    roles: [ceph-public, ceph-cluster]
+storage:
+  zfs: []
+  ceph:
+    enabled: true
+    pools:
+      - name: ceph-vm
+        size: 3
+        minSize: 2
+        pgNum: 64
+    cephfs: true

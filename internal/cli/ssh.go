@@ -105,7 +105,11 @@ func consoleCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			conn, err := net.Dial("unix", c.Dir.Run(node.Name+"-console.sock"))
+			sock, err := c.ConsoleSocket(node.Name)
+			if err != nil {
+				return err
+			}
+			conn, err := net.Dial("unix", sock)
 			if err != nil {
 				return fmt.Errorf("%s: console not available (is the node running?): %w", node.Name, err)
 			}

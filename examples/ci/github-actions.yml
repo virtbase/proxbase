@@ -1,0 +1,38 @@
+# Example workflow: run tests against a real single-node Proxmox VE cluster on a
+# GitHub-hosted Linux runner (they expose /dev/kvm). Copy to .github/workflows/.
+name: Proxmox integration tests
+
+on: [pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Install QEMU and proxbase
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
+          go install github.com/virtbase/proxbase/cmd/proxbase@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Create cluster
+        run: proxbase create ci --nodes 1 --memory 4G --data-disks none
+      - name: Run tests
+        run: |
+          eval "$(proxbase env ci)"
+          curl -sf --cacert "$PROXBASE_CA_CERT" -H "Authorization: PVEAPIToken=$PROXMOX_VE_API_TOKEN" \
+            "${PROXMOX_VE_ENDPOINT}api2/json/version"
+          # your tests here, e.g. go test ./... -tags integration
+      - name: Logs on failure
+        if: failure()
+        run: tail -n 50 ~/.local/share/proxbase/clusters/ci/logs/*.log
+      - name: Destroy cluster
+        if: always()
+        run: proxbase destroy ci --yes

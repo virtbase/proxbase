@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"fmt"
-	"os"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -51,58 +48,4 @@ func nodeCmd() *cobra.Command {
 	remove.Flags().BoolVar(&force, "force", false, "remove even with guests on the node or Ceph pools left degraded")
 	cmd.AddCommand(add, remove)
 	return cmd
-}
-
-func snapshotCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "snapshot", Short: "Save and restore all disks of a stopped cluster"}
-	op := func(use, short string, f func(c clusterOps, name string) error) *cobra.Command {
-		return &cobra.Command{
-			Use:   use + " [cluster] <snapshot>",
-			Short: short,
-			Args:  cobra.RangeArgs(1, 2),
-			RunE: func(_ *cobra.Command, args []string) error {
-				c, err := openCluster(args[:len(args)-1])
-				if err != nil {
-					return err
-				}
-				name := args[len(args)-1]
-				t0 := time.Now()
-				if err := f(c, name); err != nil {
-					return err
-				}
-				logf("%s %s: done in %s", use, name, time.Since(t0).Round(time.Millisecond))
-				return nil
-			},
-		}
-	}
-	list := &cobra.Command{
-		Use:   "list [cluster]",
-		Short: "List snapshots",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			c, err := openCluster(args)
-			if err != nil {
-				return err
-			}
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tCREATED\tNODES")
-			for _, s := range c.St.Snapshots {
-				fmt.Fprintf(w, "%s\t%s\t%d\n", s.Name, s.Created.Local().Format(time.DateTime), len(s.Nodes))
-			}
-			return w.Flush()
-		},
-	}
-	cmd.AddCommand(
-		op("save", "Snapshot every disk (cluster must be stopped)", clusterOps.SnapshotSave),
-		op("restore", "Reset every disk to a snapshot (cluster must be stopped)", clusterOps.SnapshotRestore),
-		op("delete", "Delete a snapshot", clusterOps.SnapshotDelete),
-		list,
-	)
-	return cmd
-}
-
-type clusterOps interface {
-	SnapshotSave(string) error
-	SnapshotRestore(string) error
-	SnapshotDelete(string) error
 }

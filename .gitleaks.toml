@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Example secrets in documentation of installed agent skills"
+paths = ['''^\.?agents?/skills/''']

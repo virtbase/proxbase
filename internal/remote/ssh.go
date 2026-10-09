@@ -1,4 +1,5 @@
-package pve
+// Package remote runs commands on nodes over SSH.
+package remote
 
 import (
 	"bytes"
@@ -12,7 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SSH runs commands as root on a node through its forwarded port.
+// SSH runs commands as root on a node through its forwarded port on 127.0.0.1.
 type SSH struct {
 	Port    int
 	Signer  ssh.Signer

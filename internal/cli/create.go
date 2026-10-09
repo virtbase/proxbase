@@ -16,7 +16,7 @@ import (
 type createOpts struct {
 	file, memory, disk, dataDisks, storage, version, output, bind string
 	nodes, cpus                                                   int
-	dryRun                                                        bool
+	dryRun, golden                                                bool
 }
 
 func createCmd() *cobra.Command {
@@ -69,6 +69,7 @@ func (o *createOpts) addFlags(cmd *cobra.Command) {
 	f.StringVar(&o.dataDisks, "data-disks", "", "data disks per node: 2x32G, 32G,64G or none")
 	f.StringVar(&o.storage, "storage", "", "data storage on the data disks: zfs, ceph or none")
 	f.StringVar(&o.version, "pve-version", "", "Proxmox VE ISO version, e.g. 9.2 or 9.2-1")
+	f.BoolVar(&o.golden, "golden", false, "clone nodes from a cached base image instead of installing each (faster)")
 	f.StringVar(&o.bind, "bind-address", "", "address for the UI/SSH forwards (default $PROXBASE_BIND_ADDRESS or 127.0.0.1)")
 }
 
@@ -101,6 +102,9 @@ func (o *createOpts) resolve(cmd *cobra.Command, args []string) (*config.Cluster
 	}
 	if f.Changed("pve-version") {
 		cfg.Proxmox.Version = o.version
+	}
+	if o.golden {
+		cfg.Proxmox.Golden = true
 	}
 	if f.Changed("bind-address") {
 		cfg.Access.BindAddress = o.bind

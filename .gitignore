@@ -1,7 +1,8 @@
 /bin/
 /dist/
 /.tools/
-/.spike
 *.test
 *.out
-coverage.txt/examples/compose/.env
+coverage.txt
+/examples/compose/.env
+/examples/compose/export/

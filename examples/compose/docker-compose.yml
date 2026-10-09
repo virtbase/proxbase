@@ -1,5 +1,5 @@
 # Linux host with /dev/kvm (and nested virtualization) only.
-#   echo "KVM_GID=$(getent group kvm | cut -d: -f3)" > .env
+#   echo "KVM_GID=$(getent group kvm | cut -d: -f3)" > .env && mkdir -p export
 #   docker compose up -d && docker compose logs -f
 services:
   proxbase:
@@ -13,6 +13,7 @@ services:
     volumes:
       - ./cluster.yaml:/config/cluster.yaml:ro
       - proxbase-data:/data
+      - ./export:/export # proxbase env --export /export
     ports:
       - "127.0.0.1:18001-18003:18001-18003" # web UI / API of pve1-3
       - "127.0.0.1:18101-18103:18101-18103" # SSH of pve1-3

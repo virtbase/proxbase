@@ -32,6 +32,9 @@ func printStatus(s *cluster.Status, output string) error {
 	if s.Ceph != "" {
 		fmt.Printf("Ceph: %s\n", s.Ceph)
 	}
+	for _, f := range s.Faults {
+		fmt.Printf("Fault: %s\n", f)
+	}
 	if s.Error != "" {
 		fmt.Printf("Last error: %s\n", firstLine(s.Error))
 	}

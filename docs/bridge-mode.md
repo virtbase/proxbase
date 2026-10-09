@@ -38,11 +38,11 @@ Nothing else in Proxbase needs privileges; the switch simply skips such networks
    `/etc/qemu/bridge.conf` is missing, so this is not possible without root today.
 
 Alternative without a setuid helper: root pre-creates tap devices owned by the user
-(`ip tuntap add pbtap0 mode tap user janic` plus `ip link set pbtap0 master pbr0`) and
+(`ip tuntap add pbtap0 mode tap user "$USER"` plus `ip link set pbtap0 master pbr0`) and
 Proxbase uses `-netdev tap,ifname=pbtap0,script=no,downscript=no`. This needs one tap
 per node and network, so it is less convenient.
 
 ## Not covered
 
-Inside Docker (M4) bridge mode needs `NET_ADMIN` and `/dev/net/tun`. The rootless
+Inside Docker, bridge mode needs `NET_ADMIN` and `/dev/net/tun`. The rootless
 default stays the recommended mode.

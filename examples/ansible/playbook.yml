@@ -1,0 +1,19 @@
+# Example playbook against a proxbase cluster:
+#   ansible-playbook -i examples/ansible/inventory.sh examples/ansible/playbook.yml
+- name: Inspect the Proxmox nodes
+  hosts: proxmox
+  gather_facts: false
+  tasks:
+    - name: Proxmox version
+      ansible.builtin.command: pveversion
+      register: version
+      changed_when: false
+
+    - name: Cluster membership
+      ansible.builtin.command: pvecm status
+      register: pvecm
+      changed_when: false
+
+    - name: Show results
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ version.stdout }}, {{ pvecm.stdout_lines | select('search', 'Quorate') | first }}"

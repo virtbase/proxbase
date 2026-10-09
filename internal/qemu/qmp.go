@@ -11,35 +11,40 @@ import (
 	"time"
 )
 
-// QMP is a minimal QEMU Machine Protocol client.
-type QMP struct {
+// qmpConn is a minimal QEMU Machine Protocol client.
+type qmpConn struct {
 	conn net.Conn
 	r    *bufio.Reader
 }
 
-func DialQMP(path string) (*QMP, error) {
+func dialQMP(path string) (*qmpConn, error) {
 	conn, err := net.DialTimeout("unix", path, 2*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	q := &QMP{conn: conn, r: bufio.NewReader(conn)}
+	q := &qmpConn{conn: conn, r: bufio.NewReader(conn)}
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if _, err := q.r.ReadBytes('\n'); err != nil { // greeting
 		conn.Close()
 		return nil, err
 	}
-	if _, err := q.Execute("qmp_capabilities"); err != nil {
+	if _, err := q.Execute("qmp_capabilities", nil); err != nil {
 		conn.Close()
 		return nil, err
 	}
 	return q, nil
 }
 
-func (q *QMP) Close() error { return q.conn.Close() }
+func (q *qmpConn) Close() error { return q.conn.Close() }
 
-func (q *QMP) Execute(cmd string) (json.RawMessage, error) {
+// Execute runs a command with optional arguments and returns its result.
+func (q *qmpConn) Execute(cmd string, args any) (json.RawMessage, error) {
 	_ = q.conn.SetDeadline(time.Now().Add(5 * time.Second))
-	if err := json.NewEncoder(q.conn).Encode(map[string]string{"execute": cmd}); err != nil {
+	req := map[string]any{"execute": cmd}
+	if args != nil {
+		req["arguments"] = args
+	}
+	if err := json.NewEncoder(q.conn).Encode(req); err != nil {
 		return nil, err
 	}
 	for {
@@ -65,26 +70,26 @@ func (q *QMP) Execute(cmd string) (json.RawMessage, error) {
 	}
 }
 
-func qmpCommand(path, cmd string) error {
-	q, err := DialQMP(path)
+// qmpExec connects, runs one command and disconnects.
+func qmpExec(path, cmd string, args any) error {
+	q, err := dialQMP(path)
 	if err != nil {
 		return err
 	}
 	defer q.Close()
-	_, err = q.Execute(cmd)
+	_, err = q.Execute(cmd, args)
 	return err
 }
 
-// Stop shuts a node down: ACPI powerdown, then QMP quit after timeout, then SIGKILL.
-func Stop(ctx context.Context, qmpPath, pidfile string, timeout time.Duration) error {
-	pid, ok := Running(pidfile)
+func stop(ctx context.Context, qmpPath, pidfile string, timeout time.Duration) error {
+	pid, ok := running(pidfile)
 	if !ok {
 		return nil
 	}
-	if timeout > 0 && qmpCommand(qmpPath, "system_powerdown") == nil && waitExit(ctx, pid, timeout) {
+	if timeout > 0 && qmpExec(qmpPath, "system_powerdown", nil) == nil && waitExit(ctx, pid, timeout) {
 		return nil
 	}
-	_ = qmpCommand(qmpPath, "quit")
+	_ = qmpExec(qmpPath, "quit", nil)
 	if waitExit(ctx, pid, 10*time.Second) {
 		return nil
 	}

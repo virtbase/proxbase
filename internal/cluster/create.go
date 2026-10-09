@@ -12,11 +12,10 @@ import (
 
 	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/image"
+	"github.com/virtbase/proxbase/internal/network"
 	"github.com/virtbase/proxbase/internal/qemu"
 	"github.com/virtbase/proxbase/internal/state"
 )
-
-const installTimeout = 20 * time.Minute
 
 // Create builds a cluster, or resumes an unfinished create of the same name.
 func Create(ctx context.Context, cfg *config.Cluster, logf Logf) (*Cluster, error) {
@@ -57,9 +56,10 @@ func Create(ctx context.Context, cfg *config.Cluster, logf Logf) (*Cluster, erro
 	return c, c.save()
 }
 
+// create runs all steps; each one skips what is already done.
 func (c *Cluster) create(ctx context.Context) error {
 	c.step("cluster %s: %d node(s), state in %s", c.Cfg.Name, c.Cfg.Nodes.Count, c.Dir)
-	img, err := image.Ensure(ctx, c.Cfg.Proxmox.Mirror, c.Cfg.Proxmox.Version, filepath.Join(state.CacheHome()), c.step)
+	img, err := image.Ensure(ctx, c.Cfg.Proxmox.Mirror, c.Cfg.Proxmox.Version, state.CacheHome(), c.step)
 	if err != nil {
 		return err
 	}
@@ -67,45 +67,30 @@ func (c *Cluster) create(ctx context.Context) error {
 	if err := c.save(); err != nil {
 		return err
 	}
-	if err := c.startSwitch(); err != nil {
-		return err
+	steps := []func(context.Context) error{
+		func(context.Context) error { return c.net.Start(c.Cfg) },
+		func(ctx context.Context) error { return c.installAll(ctx, img) },
+		c.bootAll,
+		c.personalizeAll,
+		c.postInstall,
+		c.formCluster,
+		func(ctx context.Context) error { return c.waitQuorum(ctx, 5*time.Minute) },
+		c.setupStorage,
+		c.ensureToken,
+		c.exportCA,
 	}
-	if err := c.installAll(ctx, img); err != nil {
-		return err
-	}
-	if err := c.bootAll(ctx); err != nil {
-		return err
-	}
-	if err := c.postInstall(ctx); err != nil {
-		return err
-	}
-	if err := c.formCluster(ctx); err != nil {
-		return err
-	}
-	if err := c.waitQuorum(ctx, 5*time.Minute); err != nil {
-		return err
-	}
-	if err := c.createZFS(ctx); err != nil {
-		return err
-	}
-	if err := c.setupCeph(ctx); err != nil {
-		return err
-	}
-	if *c.Cfg.Access.APIToken {
-		if err := c.ensureToken(ctx); err != nil {
+	for _, step := range steps {
+		if err := step(ctx); err != nil {
 			return err
 		}
-	}
-	if err := c.exportCA(ctx); err != nil {
-		return err
 	}
 	c.step("cluster %s is ready", c.Cfg.Name)
 	return nil
 }
 
-var unixPathMax = 107
+const unixPathMax = 107
 
-// preflight catches host problems before anything is written.
+// preflight catches host problems for new nodes before anything is written.
 func preflight(cfg *config.Cluster, nodes []config.Node) error {
 	f, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
 	if err != nil {
@@ -117,10 +102,10 @@ func preflight(cfg *config.Cluster, nodes []config.Node) error {
 			return fmt.Errorf("%s not found in PATH (install QEMU)", bin)
 		}
 	}
-	d := state.ForCluster(cfg.Name)
+	sw := network.Switch{Dir: state.ForCluster(cfg.Name), Cluster: cfg.Name}
 	for _, n := range nodes {
-		for _, net := range cfg.Networks {
-			if p := d.Run(n.Name + "-" + net.Name + ".sock"); len(p) > unixPathMax {
+		for _, p := range sw.SocketPaths(cfg, n) {
+			if len(p) > unixPathMax {
 				return fmt.Errorf("socket path %s is too long (%d > %d bytes); use a shorter XDG_DATA_HOME or names", p, len(p), unixPathMax)
 			}
 		}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    "helpers:pinGitHubActionDigests",
+    "docker:pinDigests"
+  ],
+  "schedule": ["before 6am on monday"],
+  "postUpdateOptions": ["gomodTidy"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    { "matchManagers": ["gomod"], "groupName": "go modules", "semanticCommitType": "deps" },
+    { "matchManagers": ["github-actions"], "groupName": "github actions", "semanticCommitType": "ci" },
+    { "matchManagers": ["dockerfile"], "groupName": "container images", "semanticCommitType": "deps" }
+  ]
+}

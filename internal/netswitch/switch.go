@@ -6,6 +6,7 @@ package netswitch
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"net"
 	"os"
 	"sync"
@@ -15,10 +16,26 @@ import (
 const writeTimeout = 5 * time.Millisecond
 
 type Switch struct {
-	conn  *net.UnixConn
-	ports map[string]*net.UnixAddr // by socket path
-	mu    sync.Mutex
-	fdb   map[[6]byte]*net.UnixAddr
+	conn   *net.UnixConn
+	ports  map[string]*net.UnixAddr // by socket path
+	mu     sync.Mutex
+	fdb    map[[6]byte]*net.UnixAddr
+	policy Policy
+}
+
+// Policy degrades forwarding for fault injection. The zero value forwards everything.
+type Policy struct {
+	// Block reports whether frames from one peer socket to another are dropped.
+	Block func(from, to string) bool
+	Delay time.Duration // added to every frame
+	Loss  float64       // fraction of frames dropped, 0..1
+}
+
+// SetPolicy replaces the forwarding policy.
+func (s *Switch) SetPolicy(p Policy) {
+	s.mu.Lock()
+	s.policy = p
+	s.mu.Unlock()
 }
 
 // Listen binds the switch socket at path; peers are the node-side socket paths.
@@ -80,19 +97,36 @@ func (s *Switch) forward(frame []byte, in *net.UnixAddr) {
 		s.fdb[srcMAC] = in
 	}
 	out, known := s.fdb[dst]
-	ports := s.ports
+	ports, policy := s.ports, s.policy
 	s.mu.Unlock()
 	if known && dst[0]&1 == 0 {
 		if out != in {
-			s.send(frame, out)
+			s.deliver(policy, frame, in, out)
 		}
 		return
 	}
 	for _, p := range ports {
 		if p != in {
-			s.send(frame, p)
+			s.deliver(policy, frame, in, p)
 		}
 	}
+}
+
+// deliver applies the policy and sends; delayed frames are copied because the
+// read buffer is reused.
+func (s *Switch) deliver(p Policy, frame []byte, from, to *net.UnixAddr) {
+	if p.Block != nil && p.Block(from.Name, to.Name) {
+		return
+	}
+	if p.Loss > 0 && rand.Float64() < p.Loss { //nolint:gosec // simulated packet loss, not security relevant
+		return
+	}
+	if p.Delay > 0 {
+		f := append([]byte(nil), frame...)
+		time.AfterFunc(p.Delay, func() { s.send(f, to) })
+		return
+	}
+	s.send(frame, to)
 }
 
 // send drops the frame if the peer is gone or not reading.

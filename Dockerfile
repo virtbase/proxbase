@@ -11,8 +11,10 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -o /out/proxbase ./cmd/proxbase
 
 FROM debian:trixie-slim
-RUN apt-get update \
- && apt-get install -y -o Acquire::Retries=3 --no-install-recommends qemu-system-x86 qemu-utils ca-certificates openssh-client tini \
+# Extra apt options for difficult networks, e.g. --build-arg APT_OPTS="-o Acquire::ForceIPv4=true"
+ARG APT_OPTS=""
+RUN apt-get update $APT_OPTS \
+ && apt-get install -y --no-install-recommends -o Acquire::Retries=3 $APT_OPTS qemu-system-x86 qemu-utils ca-certificates openssh-client tini \
  && rm -rf /var/lib/apt/lists/*
 # Runs as uid 1000; /dev/kvm access comes from the host (group_add the kvm GID).
 RUN useradd --uid 1000 --create-home proxbase && mkdir -p /data && chown proxbase:proxbase /data

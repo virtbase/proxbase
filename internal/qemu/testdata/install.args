@@ -55,7 +55,7 @@ usb-storage,bus=usb.0,drive=ais,removable=on
 -append
 ro quiet console=ttyS0,115200
 -chardev
-socket,id=ser0,path=/r/serial.sock,server=on,wait=on
+socket,id=ser0,path=/r/pve1-serial.sock,server=on,wait=on
 -serial
 chardev:ser0
 -no-reboot

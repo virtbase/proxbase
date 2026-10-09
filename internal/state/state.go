@@ -33,6 +33,14 @@ type State struct {
 	Duration  string       `json:"createDuration,omitempty"`
 	Nodes     []*NodeState `json:"nodes"`
 	Snapshots []Snapshot   `json:"snapshots,omitempty"`
+	Faults    []Fault      `json:"faults,omitempty"`
+}
+
+// Fault is an injected node fault (network faults live with the switch).
+type Fault struct {
+	Kind    string `json:"kind"` // kill, freeze, link-down
+	Node    string `json:"node"`
+	Network string `json:"network,omitempty"`
 }
 
 type Snapshot struct {
@@ -57,6 +65,8 @@ type NodeState struct {
 	HostKey   string `json:"hostKey,omitempty"` // SSH host key, trusted on first use
 	UIPort    int    `json:"uiPort"`
 	SSHPort   int    `json:"sshPort"`
+	Base      string `json:"base,omitempty"`            // golden base image under the root disk
+	Pending   bool   `json:"pendingIdentity,omitempty"` // cloned, personalization not done
 }
 
 func (s *State) Node(name string) *NodeState {

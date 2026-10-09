@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/virtbase/proxbase/internal/cluster"
+	"github.com/virtbase/proxbase/internal/network"
 	"github.com/virtbase/proxbase/internal/state"
 )
 
@@ -28,7 +29,7 @@ func Execute() int {
 		SilenceErrors: true,
 	}
 	root.AddCommand(createCmd(), listCmd(), statusCmd(), startCmd(), stopCmd(), destroyCmd(),
-		upCmd(), nodeCmd(), snapshotCmd(), sshCmd(), consoleCmd(),
+		upCmd(), nodeCmd(), snapshotCmd(), faultCmd(), imageCmd(), sshCmd(), consoleCmd(),
 		envCmd(), doctorCmd(), configCmd(), versionCmd(), switchCmd())
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
@@ -75,9 +76,9 @@ func versionCmd() *cobra.Command {
 
 func switchCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:    cluster.SwitchCommand + " <cluster>",
+		Use:    network.Command + " <cluster>",
 		Hidden: true,
 		Args:   cobra.ExactArgs(1),
-		RunE:   func(_ *cobra.Command, args []string) error { return cluster.RunSwitch(args[0]) },
+		RunE:   func(_ *cobra.Command, args []string) error { return network.Run(args[0]) },
 	}
 }

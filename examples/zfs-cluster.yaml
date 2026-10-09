@@ -1,0 +1,20 @@
+# Three nodes, each with a mirrored ZFS pool "tank" on two data disks.
+# Pools are per node: replication jobs or live migration with --with-local-disks
+# move guests between them.
+#   proxbase create -f examples/zfs-cluster.yaml
+apiVersion: proxbase.dev/v1alpha1
+kind: Cluster
+name: zfs
+nodes:
+  count: 3
+  defaults:
+    cpus: 4
+    memory: 4G
+    dataDisks:
+      - size: 32G
+      - size: 32G
+storage:
+  zfs:
+    - name: tank
+      raid: mirror
+      disks: [vdb, vdc]

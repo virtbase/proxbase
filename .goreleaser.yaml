@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+project_name: proxbase
+
+builds:
+  - id: proxbase
+    main: ./cmd/proxbase
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/virtbase/proxbase/internal/cli.version={{ .Version }}"]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md]
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+# Keyless signing with the GitHub OIDC identity of the release workflow.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args: [sign-blob, "--bundle=${signature}", "${artifact}", --yes]
+
+nfpms:
+  - id: packages
+    package_name: proxbase
+    vendor: virtbase
+    homepage: https://github.com/virtbase/proxbase
+    maintainer: "Janic Bellmann <contact@janic.dev>"
+    description: Proxmox VE clusters in QEMU/KVM for labs and CI
+    license: Apache-2.0
+    formats: [deb, rpm, apk]
+    bindir: /usr/bin
+    dependencies: [qemu-utils]
+    recommends: [qemu-system-x86]
+    overrides:
+      rpm:
+        dependencies: [qemu-img]
+        recommends: [qemu-kvm]
+      apk:
+        dependencies: [qemu-img]
+        recommends: [qemu-system-x86_64]
+
+homebrew_casks:
+  - name: proxbase
+    repository:
+      owner: virtbase
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/virtbase/proxbase
+    description: Proxmox VE clusters in QEMU/KVM for labs and CI
+    caveats: macOS support is experimental; clusters need a Linux host with KVM.
+    skip_upload: auto
+
+dockers_v2:
+  - id: image
+    dockerfile: Dockerfile.release
+    images: [ghcr.io/virtbase/proxbase]
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms: [linux/amd64] # arm64 image once there is an arm64 Proxmox ISO workflow
+    build_args:
+      APT_OPTS: '{{ index .Env "APT_OPTS" }}' 
+    labels:
+      org.opencontainers.image.source: https://github.com/virtbase/proxbase
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: Apache-2.0
+
+docker_signs:
+  - cmd: cosign
+    artifacts: manifests
+    args: [sign, "${artifact}@${digest}", --yes]
+
+# release-please creates the release and its notes; GoReleaser adds the artifacts.
+release:
+  mode: keep-existing
+changelog:
+  disable: true
