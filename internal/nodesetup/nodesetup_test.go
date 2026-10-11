@@ -1,6 +1,7 @@
 package nodesetup
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -28,9 +29,50 @@ networks:
 		"auto vmbr3\niface vmbr3 inet manual\n\tbridge-ports $nic2\n\tbridge-stp off\n\tbridge-fd 0\n\tbridge-vlan-aware yes\n\tbridge-vids 100 200-299\n",
 		"Components: pve-no-subscription",
 		"serial-getty@ttyS0",
+		"GRUB_TIMEOUT=0",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("script lacks %q", want)
 		}
+	}
+}
+
+// Provisioning shortcuts must be undone completely.
+func TestProvision(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"zfs set sync=disabled rpool", "zfs set sync=standard rpool"},
+		{"/etc/dpkg/dpkg.cfg.d/proxbase-unsafe-io", "rm -f /etc/dpkg/dpkg.cfg.d/proxbase-unsafe-io"},
+	} {
+		if !strings.Contains(ProvisionStart, pair[0]) {
+			t.Errorf("ProvisionStart lacks %q", pair[0])
+		}
+		if !strings.Contains(ProvisionEnd, pair[1]) {
+			t.Errorf("ProvisionEnd lacks %q", pair[1])
+		}
+	}
+}
+
+// Every script must at least parse.
+func TestScriptsSyntax(t *testing.T) {
+	cfg, err := config.Decode(strings.NewReader("nodes: {count: 2}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.SetDefaults()
+	for name, s := range map[string]string{
+		"Script":         Script(cfg, cfg.NodeList()[0]),
+		"NoGrubTimeout":  NoGrubTimeout,
+		"ProvisionStart": ProvisionStart,
+		"ProvisionEnd":   ProvisionEnd,
+		"Upgrade":        Upgrade,
+		"PendingKernel":  PendingKernel,
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := exec.CommandContext(t.Context(), "bash", "-n")
+			cmd.Stdin = strings.NewReader(s)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Errorf("bash -n: %v\n%s", err, out)
+			}
+		})
 	}
 }

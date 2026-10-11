@@ -79,6 +79,7 @@ func (c *Cluster) create(ctx context.Context) error {
 		c.setupStorage,
 		c.ensureToken,
 		c.exportCA,
+		c.endProvisioning,
 	}
 	for _, step := range steps {
 		if err := step(ctx); err != nil {

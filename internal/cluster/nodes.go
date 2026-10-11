@@ -149,7 +149,7 @@ func (c *Cluster) RemoveNode(ctx context.Context, name string, force bool) error
 	if err := c.net.Reload(c.Cfg); err != nil {
 		return err
 	}
-	if err := c.postInstall(ctx); err != nil { // rewrites /etc/hosts
+	if err := c.configureNodes(ctx, false); err != nil { // rewrites /etc/hosts
 		return err
 	}
 	if err := c.waitQuorum(ctx, 3*time.Minute); err != nil {

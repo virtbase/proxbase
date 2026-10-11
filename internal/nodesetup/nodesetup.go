@@ -63,7 +63,7 @@ block /etc/hosts "$(cat <<'EOF'
 
 # Login prompt on the serial console (proxbase console).
 systemctl enable --now serial-getty@ttyS0.service >/dev/null 2>&1
-
+%s
 # No-subscription repository instead of enterprise.
 codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
 for f in /etc/apt/sources.list.d/pve-enterprise.sources /etc/apt/sources.list.d/ceph.sources; do
@@ -89,8 +89,39 @@ else
 	ifreload -a
 	echo changed
 fi
-`, hosts.String(), nics.String(), ifaces.String())
+`, hosts.String(), NoGrubTimeout, nics.String(), ifaces.String())
 }
+
+// NoGrubTimeout makes the node boot without waiting in the GRUB menu (Debian
+// waits 5 seconds), which shortens every reboot and start.
+const NoGrubTimeout = `
+if grep -q '^GRUB_TIMEOUT=[1-9]' /etc/default/grub; then
+	sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
+	if proxmox-boot-tool status >/dev/null 2>&1; then
+		proxmox-boot-tool refresh >/dev/null 2>&1
+	else
+		update-grub >/dev/null 2>&1
+	fi
+fi
+`
+
+// ProvisionStart speeds up writes while proxbase provisions a node: ZFS treats
+// fsync as a no-op and dpkg skips its per-file syncs. ProvisionEnd restores
+// both, so a ready cluster has real fsync semantics for fault injection. It also
+// turns on autotrim so freed space shrinks the disk images.
+const ProvisionStart = `
+if zpool list rpool >/dev/null 2>&1; then
+	zfs set sync=disabled rpool
+	zpool set autotrim=on rpool
+fi
+echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/proxbase-unsafe-io
+`
+
+// ProvisionEnd undoes ProvisionStart's write shortcuts.
+const ProvisionEnd = `
+if zpool list rpool >/dev/null 2>&1; then zfs set sync=standard rpool; fi
+rm -f /etc/dpkg/dpkg.cfg.d/proxbase-unsafe-io
+`
 
 // AptWait waits for apt runs started by PVE itself (pveupdate right after boot)
 // and sets $apt to an apt-get that waits for locks and retries downloads.
