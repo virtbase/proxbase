@@ -71,6 +71,8 @@ func TestValidationErrors(t *testing.T) {
 		"nodes: {defaults: {memory: 1G}}\n":                                                           "at least 2G",
 		"nodes: {overrides: {pve9: {cpus: 2}}}\n":                                                     "unknown node",
 		"networks: [{name: a, cidr: 10.1.0.0/28}]\nnodes: {count: 5}\n":                               "too small",
+		"proxmox: {domain: \"lab/x.internal\"}\n":                                                     "proxmox.domain",
+		"proxmox: {domain: internal}\n":                                                               "proxmox.domain",
 	}
 	for in, want := range cases {
 		err := load(t, in).Validate()

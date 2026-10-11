@@ -16,6 +16,7 @@ var (
 	bridgeRe = regexp.MustCompile(`^vmbr[0-9]{1,4}$`)
 	vlanRe   = regexp.MustCompile(`^[0-9]{1,4}(-[0-9]{1,4})?$`)
 	versRe   = regexp.MustCompile(`^[0-9]+\.[0-9]+(-[0-9]+)?$`)
+	domainRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$`)
 	minDisks = map[string]int{"single": 1, "mirror": 2, "raid10": 4, "raidz": 3, "raidz2": 4, "raidz3": 5}
 )
 
@@ -41,6 +42,9 @@ func (c *Cluster) Validate() error {
 	}
 	if !nameRe.MatchString(c.Name) {
 		add("name: %q must match %s", c.Name, nameRe)
+	}
+	if !domainRe.MatchString(c.Proxmox.Domain) || len(c.Proxmox.Domain) > 200 {
+		add("proxmox.domain: %q must be a DNS domain like lab.internal", c.Proxmox.Domain)
 	}
 	if !versRe.MatchString(c.Proxmox.Version) {
 		add("proxmox.version: %q must look like 9.2 or 9.2-1", c.Proxmox.Version)
