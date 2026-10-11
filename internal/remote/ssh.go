@@ -14,6 +14,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// HandshakeTimeout bounds the SSH handshake of one Dial.
+const HandshakeTimeout = 3 * time.Second
+
 // SSH runs commands as root on a node through its forwarded port on 127.0.0.1.
 type SSH struct {
 	Port    int
@@ -43,9 +46,25 @@ func (s *SSH) Dial(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// QEMU's port forward accepts at once even while the guest is still booting,
+	// then retries its own connection to the guest only every 12s. Without a
+	// deadline the handshake waits for that retry instead of failing fast so
+	// the caller can dial again.
+	deadline := time.Now().Add(HandshakeTimeout)
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
+	}
+	if err := conn.SetDeadline(deadline); err != nil {
+		conn.Close()
+		return "", err
+	}
 	c, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
 	if err != nil {
 		conn.Close()
+		return "", err
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		c.Close()
 		return "", err
 	}
 	s.client = ssh.NewClient(c, chans, reqs)

@@ -92,7 +92,7 @@ func (c *Cluster) ssh(ctx context.Context, name string) (*remote.SSH, error) {
 // waitSSH waits until a node accepts SSH logins; a changed host key ends the wait.
 func (c *Cluster) waitSSH(ctx context.Context, name string, timeout time.Duration) (*remote.SSH, error) {
 	var s *remote.SSH
-	err := retry.Do(ctx, timeout, 2*time.Second, func() error {
+	err := retry.Do(ctx, timeout, time.Second, func() error {
 		var err error
 		s, err = c.ssh(ctx, name)
 		if err != nil && strings.Contains(err.Error(), "host key") {

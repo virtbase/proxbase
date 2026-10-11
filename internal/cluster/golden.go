@@ -99,7 +99,7 @@ func (c *Cluster) personalize(ctx context.Context, name string, keys []string, m
 	}
 	done()
 	// Rebooting: wait for the new boot with the cluster key and the new host key.
-	err = retry.Do(ctx, 5*time.Minute, 5*time.Second, func() error {
+	err = retry.Do(ctx, 5*time.Minute, time.Second, func() error {
 		ns, err := c.dial(ctx, name, c.signer, "")
 		if err != nil {
 			return err

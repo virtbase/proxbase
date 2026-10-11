@@ -60,7 +60,7 @@ func (c *Cluster) rebootForKernel(ctx context.Context, name string, s *remote.SS
 		return err
 	}
 	var running string
-	err = retry.Do(ctx, 5*time.Minute, 5*time.Second, func() error {
+	err = retry.Do(ctx, 5*time.Minute, time.Second, func() error {
 		ns, err := c.ssh(ctx, name)
 		if err != nil {
 			return err

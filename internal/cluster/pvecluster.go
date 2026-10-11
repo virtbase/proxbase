@@ -122,7 +122,7 @@ func (c *Cluster) join(ctx context.Context, api *pve.Client, first, n config.Nod
 // task is given, its failure ends the wait early.
 func waitMember(ctx context.Context, api *pve.Client, node string, joiner *pve.Client, upid string, timeout time.Duration) error {
 	var joinErr error
-	err := retry.Do(ctx, timeout, 2*time.Second, func() error {
+	err := retry.Do(ctx, timeout, time.Second, func() error {
 		cs, members, err := api.ClusterStatus(ctx)
 		if err == nil && cs != nil && cs.Quorate == 1 && members[node].Online == 1 {
 			return nil
