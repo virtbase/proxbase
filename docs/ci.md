@@ -1,7 +1,8 @@
 # CI and automation
 
 GitHub-hosted Linux runners expose `/dev/kvm`, so they can run a real cluster. A
-single node is ready in 2-3 minutes with a cached base image.
+single node is ready in well under a minute with a cached base image (21 s on a
+desktop host; runners are slower), and in seconds with a [template](#cluster-templates).
 
 ## GitHub Action
 
@@ -39,6 +40,7 @@ and creates the cluster with `--golden`. On failure it prints the node logs.
 | `nodes`, `memory`, `data-disks`, `storage`, `pve-version` | `1`, file defaults | As the `create` flags |
 | `golden` | `true` | Clone from a cached base image |
 | `cache` | `true` | Cache `~/.cache/proxbase` |
+| `template` | `false` | Cache the ready cluster as a live snapshot and resume it in later runs (see below) |
 | `verify-signature` | `false` | Verify with cosign (install it first) |
 
 | Output | |
@@ -52,6 +54,31 @@ Composite actions have no post step, so destroy the cluster with an `if: always(
 step. A complete workflow is in [examples/ci/github-actions.yml](../examples/ci/github-actions.yml);
 the repository's own [E2E workflow](../.github/workflows/e2e.yml) uses the action
 from the checkout with a freshly built binary.
+
+## Cluster templates
+
+With `template: "true"` the first run creates the cluster, takes a
+[live snapshot](lifecycle.md#live-snapshots) of it, stops it, saves the cluster
+directory with `actions/cache/save` and resumes it from the snapshot. Later runs
+restore that cache and resume the cluster in seconds instead of creating it.
+
+```yaml
+      - id: pve
+        uses: virtbase/proxbase@v0
+        with:
+          nodes: "1"
+          template: "true"
+```
+
+- The cache key covers the inputs (and the cluster file), the proxbase and QEMU
+  versions and the CPU model: a live snapshot only loads into the same QEMU on the
+  same CPU. A runner on another CPU model creates and caches its own template.
+- If resuming fails, the action destroys the cluster and creates it as usual.
+- The cached cluster includes its secrets (root password, SSH key, API token). They
+  only reach a cluster bound to the runner's loopback address, but anyone who can
+  read the repository's caches can read them.
+- Each node needs cache space for its disk changes and its memory (about 2 GB for
+  one idle 4 GiB node), next to the ISO and base image cache.
 
 ## Other CI systems
 

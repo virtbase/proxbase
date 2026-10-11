@@ -72,6 +72,31 @@ proxbase snapshot delete lab base
 A snapshot can only be restored with the same set of nodes it was taken with.
 Saving takes well under a second; restoring about a second.
 
+### Live snapshots
+
+A live snapshot is taken of the running cluster and also holds the memory of every
+node. Restoring it starts the cluster in that state: no boot, no waiting for
+quorum to form or Ceph to settle.
+
+```bash
+proxbase snapshot save lab ready --live   # cluster running; nodes pause for the save
+proxbase stop lab --timeout 0             # restoring needs a stopped cluster
+proxbase snapshot restore lab ready       # nodes resume where they were
+```
+
+- All nodes are paused while their snapshots are written, so the snapshot shows one
+  moment of the whole cluster; they continue afterwards. Faults must be cleared.
+- On restore, every node loads its snapshot paused and all are resumed together.
+  The node clocks stood still in the snapshot; Proxbase sets them to the host's time,
+  then waits for quorum, the API and storage health as `start` does.
+- Memory is stored in the root disk image, so a live snapshot needs about as much
+  disk space as the nodes use memory (1.8 GB per idle 4 GiB node).
+- On a 3-node ZFS cluster, saving took 3 s and restoring to a quorate, ready
+  cluster 5 s.
+- It loads only into the same QEMU version on the same CPU model (nodes use
+  `-cpu host`); after a QEMU upgrade, take it again.
+- `snapshot delete` works on a running cluster for live snapshots.
+
 ## Access
 
 ```bash

@@ -33,16 +33,18 @@ pve3  running  online   10.10.10.13  https://127.0.0.1:18003  127.0.0.1:18103
   link0/link1, Ceph public/cluster, migration), VLAN-aware and L2-only bridges, jumbo
   frames.
 - **Lifecycle:** start/stop, add and remove nodes (with Ceph draining), consistent
-  snapshots of the whole cluster, resumable creates.
+  snapshots of the whole cluster, live snapshots that resume a running cluster in
+  seconds, resumable creates.
 - **Fault injection:** power loss, hung nodes, pulled cables, network partitions,
   latency and loss, to test HA, fencing and Ceph recovery.
 - **Ready for automation:** API token and CA export, `proxbase env` for shells, JSON
   and the bpg/proxmox Terraform provider, `-o json` and `--progress json` for scripts,
-  and a [GitHub Action](docs/ci.md) for CI.
+  and a [GitHub Action](docs/ci.md) for CI that can cache a ready cluster as a
+  template.
 - **For AI agents:** `proxbase mcp` is an [MCP server](docs/mcp.md): agents create
   clusters, run commands on nodes, snapshot and inject faults through tools.
 - **Fast:** `--golden` clones nodes from a cached base image: a 3-node cluster in
-  about 1.5 minutes, with a unique identity per node.
+  under a minute (Ceph: 1.5 minutes), with a unique identity per node.
 - **Declarative:** one YAML file with a JSON schema; every flag overrides a field.
 - **Docker Compose:** `proxbase up` runs a cluster in the foreground with clean
   shutdown and a health check.

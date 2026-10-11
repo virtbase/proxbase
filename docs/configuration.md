@@ -73,6 +73,7 @@ More in [examples/](../examples).
 | `sshKeys` | none | Extra public keys for root, next to the generated one |
 | `upgrade` | `false` | `apt dist-upgrade` on every node before clustering; reboots into a new kernel |
 | `goldenImage` | `false` | Clone nodes from a cached base image instead of installing each ([golden images](golden-images.md)) |
+| `aptCache` | `true` | Packages Proxbase installs (`upgrade`, Ceph) are downloaded once into `~/.cache/proxbase/apt` and served to the nodes from there |
 
 ### `nodes`
 

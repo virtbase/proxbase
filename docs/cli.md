@@ -45,8 +45,8 @@ online and Ceph (if configured) is `HEALTH_OK`; use it for health checks.
 | --- | --- |
 | `node add [cluster] --count N` | Install, join and configure N new nodes |
 | `node remove [cluster] <node>` | Drain and remove a node (`--force` with guests or degraded Ceph pools) |
-| `snapshot save [cluster] <name>` | Snapshot every disk of the stopped cluster |
-| `snapshot restore [cluster] <name>` | Reset every disk to a snapshot |
+| `snapshot save [cluster] <name>` | Snapshot every disk of the stopped cluster; `--live`: the running cluster with its memory |
+| `snapshot restore [cluster] <name>` | Reset every disk to a snapshot; a live snapshot also starts the cluster in its saved state |
 | `snapshot delete [cluster] <name>` | Delete a snapshot |
 | `snapshot list [cluster]` | List snapshots |
 
@@ -78,7 +78,7 @@ See [fault-injection.md](fault-injection.md).
 | --- | --- |
 | `image list` | Cached base images and the clusters using them |
 | `image prune` | Delete base images no cluster uses |
-| `doctor` | Check KVM, nested virtualization, QEMU, memory, disk, ports (`--port-base`) |
+| `doctor` | Check KVM, nested virtualization, QEMU, memory, KSM, disk, ports (`--port-base`) |
 | `config init [file]` | Write an annotated example (`--force` to overwrite) |
 | `config validate <file>` | Strictly parse and check a cluster file |
 | `config schema` | Print the JSON schema |

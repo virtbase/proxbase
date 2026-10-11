@@ -65,7 +65,7 @@ Clusters created in the container live in the `proxbase` volume; use
 | `cluster_destroy` | Delete a cluster; `confirm` must repeat the cluster name |
 | `node_exec` | Run a command as root on a node; returns `stdout`, `stderr`, `exitCode` |
 | `cluster_env` | API endpoint, token, CA certificate, SSH key and ports; root password only with `includeRootPassword` |
-| `snapshot_save`, `snapshot_restore`, `snapshot_delete`, `snapshot_list` | Snapshots of the stopped cluster |
+| `snapshot_save`, `snapshot_restore`, `snapshot_delete`, `snapshot_list` | Snapshots of the stopped cluster, or with `live` of the running cluster including memory (restoring resumes it) |
 | `fault_apply`, `fault_clear` | kill, freeze, thaw, link-down/up, partition, degrade |
 | `config_validate` | Check a cluster file; returns errors, warnings and the file with defaults |
 
@@ -75,8 +75,8 @@ clients can ask before `cluster_destroy`, `snapshot_restore` or `fault_apply`.
 
 ## Long-running creates
 
-A create takes 2-3 minutes with a cached [golden image](golden-images.md) (the
-default for `cluster_create`) and 10-20 minutes the first time, when it downloads the
+A create takes under a minute with a cached [golden image](golden-images.md) (the
+default for `cluster_create`; Ceph about 1.5 minutes) and 10-20 minutes the first time, when it downloads the
 ISO and builds the base image. Many clients time out tool calls earlier, so:
 
 - `cluster_create` starts the create as a background job on the host

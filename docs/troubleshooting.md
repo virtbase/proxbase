@@ -8,7 +8,7 @@ Everything of a cluster lives in `~/.local/share/proxbase/clusters/<name>/`:
 | --- | --- |
 | `logs/<node>-install.log` | Serial console of the installer |
 | `logs/<node>-qemu.log` | QEMU errors during the install |
-| `logs/<node>-console.log` | Serial console of the running node |
+| `logs/<node>-console.log` | Serial console of the running node; the first-boot hook reports `proxbase-first-boot: identity <node>` there |
 | `logs/switch.log` | Internal network switch |
 | `state.json`, `cluster.yaml` | Progress and the resolved configuration |
 | `secrets/` | Root password, SSH key, API token, CA (mode 0600) |
@@ -25,8 +25,10 @@ Everything of a cluster lives in `~/.local/share/proxbase/clusters/<name>/`:
 | `port 18001 for pve1 is in use` | Another cluster or program uses the ports; set `access.portBase` |
 | `socket path … is too long` | Unix socket paths are limited to 107 bytes; use a shorter `XDG_DATA_HOME` or cluster/network names |
 | Install times out or `installer reported failure` | Read `logs/<node>-install.log`; the last lines are also in the error |
-| `fetch checksums` fails | The ISO mirror is unreachable; set `proxmox.mirror` |
-| `Hash Sum mismatch` during apt (nodes or image build) | A broken mirror or path (seen over IPv6). Retry; for image builds pass `--build-arg APT_OPTS="-o Acquire::ForceIPv4=true"` |
+| `fetch checksums` fails | The ISO mirror is unreachable; set `proxmox.mirror`. An exact `proxmox.version` (`9.2-1`) that is cached needs no network |
+| `the cluster join left the node certificate missing or from another CA; issued a new one` | Not an error: a Proxmox VE join can lose the node's files or replace the cluster CA when the cluster file system syncs late; Proxbase detects it after the joins and issues a new node certificate from the current CA |
+| `bake base image failed` | Building a [golden image](golden-images.md) failed while baking; the error shows the end of the serial console (for Ceph usually the package download) |
+| `Hash Sum mismatch` during apt (nodes or image build) | A broken mirror or path (seen over IPv6). Proxbase's own apt runs retry once past the package cache; if it persists, retry later. For Docker image builds pass `--build-arg APT_OPTS="-o Acquire::ForceIPv4=true"`. `rm -rf ~/.cache/proxbase/apt` empties the package cache |
 | `ceph not ready after 10m0s` | The error includes `ceph -s` and `ceph health detail`; usually too little memory per node |
 | Nested guests are slow or fail to start | Nested virtualization is off on the host (`proxbase doctor`) |
 | `cluster "x" is busy` | Another proxbase command holds the cluster lock, e.g. a create started over MCP (`cluster_status` shows it) |

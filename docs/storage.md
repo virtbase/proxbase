@@ -20,7 +20,9 @@ storage:
 
 Every node has its own pool with the same name; live migration of VMs on it copies
 the disks (`qm migrate --with-local-disks`). Pools are created through the Proxmox
-API (`POST /nodes/{node}/disks/zfs`, `ashift=12`).
+API (`POST /nodes/{node}/disks/zfs`, `ashift=12`), on all nodes at once, with
+`autotrim` on (also for `rpool`), so space freed in a pool shrinks the disk image
+on the host.
 
 ## Ceph
 
@@ -43,6 +45,17 @@ hyperconverged cluster:
 
 `create` and `start` wait until Ceph reports `HEALTH_OK`, every OSD is up and in, all
 placement groups are `active+clean` and the Ceph storages are active on every node.
+
+Monitors are created one after another (each joins the quorum first) and MDS daemons
+too (`pveceph` rewrites `ceph.conf` for each without a lock); managers and OSDs are
+created on all nodes at once. With `--golden`, the Ceph packages are baked into the
+base image ([golden images](golden-images.md)), so nodes skip `pveceph install`.
+
+Memory targets for small nodes: Ceph's defaults are sized for dedicated servers
+(4 GiB per OSD, 4 GiB MDS cache) and the daemons grow their caches toward them.
+Proxbase sets `osd_memory_target` to 2 GiB (about the lowest Ceph developers
+recommend) and `mds_cache_memory_limit` to 1 GiB, unless they are set already, so
+a value changed with `ceph config set` stays.
 
 Notes:
 
