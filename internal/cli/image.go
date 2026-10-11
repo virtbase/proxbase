@@ -28,9 +28,13 @@ func imageCmd() *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "KEY\tISO\tROOT\tCREATED\tUSED BY")
+			fmt.Fprintln(w, "KEY\tISO\tROOT\tCEPH\tCREATED\tUSED BY")
 			for _, m := range images {
-				fmt.Fprintf(w, "%s\t%s\t%s %s\t%s\t%v\n", m.Key, m.ISO, m.Filesystem, m.Size, m.Created.Local().Format(time.DateTime), users[m.Key])
+				ceph := m.Ceph
+				if ceph == "" {
+					ceph = "-"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s %s\t%s\t%s\t%v\n", m.Key, m.ISO, m.Filesystem, m.Size, ceph, m.Created.Local().Format(time.DateTime), users[m.Key])
 			}
 			return w.Flush()
 		},

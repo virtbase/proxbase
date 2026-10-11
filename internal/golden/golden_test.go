@@ -21,6 +21,14 @@ func TestKey(t *testing.T) {
 	if Key(cfg, n[0], "/c/proxmox-ve_9.2-2.iso") == k1 {
 		t.Fatal("a different ISO needs a different key")
 	}
+	ceph, _ := config.Decode(strings.NewReader("nodes: {count: 3}\nstorage: {ceph: {enabled: true}}\n"))
+	ceph.SetDefaults()
+	if !ceph.CephEnabled() {
+		t.Fatal("test config must enable Ceph")
+	}
+	if Key(ceph, ceph.NodeList()[0], "/c/proxmox-ve_9.2-1.iso") == k1 {
+		t.Fatal("a base image with Ceph baked in needs a different key")
+	}
 }
 
 func TestPersonalize(t *testing.T) {
@@ -39,5 +47,16 @@ func TestPersonalize(t *testing.T) {
 	}
 	if !strings.Contains(Finish("pve2"), "rm -rf /etc/pve/nodes/golden") {
 		t.Error("Finish must remove the base image's node directory")
+	}
+}
+
+func TestLastLines(t *testing.T) {
+	console := "\x1b[H\x1b[J\x1b[1;1H\x1b[?25l\x1b[m  GNU GRUB  version 2.12\r\n\x1b[5;78H\r\n" +
+		"  Booting `Proxmox VE GNU/Linux'\r\n\r\n\x1b]104\x07\x1b[?7herror: Another instance of this program is already running.\r\n" +
+		"proxbase-first-boot: bake failed\r\n"
+	got := lastLines(console, 2)
+	want := "  error: Another instance of this program is already running.\n  proxbase-first-boot: bake failed"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }

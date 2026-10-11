@@ -21,13 +21,14 @@ import (
 // cloneAll creates the nodes' disks from base images instead of installing.
 func (c *Cluster) cloneAll(ctx context.Context, img *image.Image, todo []config.Node) error {
 	cloner, ok := c.runtime.(vm.Cloner)
-	if !ok {
-		return errors.New("the node runtime cannot clone base images")
+	builder, ok2 := c.runtime.(golden.Builder)
+	if !ok || !ok2 {
+		return errors.New("the node runtime cannot build or clone base images")
 	}
 	t0 := time.Now()
 	var names []string
 	for _, n := range todo {
-		base, err := golden.Ensure(ctx, c.runtime, c.Cfg, n, img, c.step)
+		base, err := golden.Ensure(ctx, builder, c.Cfg, n, img, c.step)
 		if err != nil {
 			return err
 		}
@@ -42,8 +43,10 @@ func (c *Cluster) cloneAll(ctx context.Context, img *image.Image, todo []config.
 	return c.save()
 }
 
-// personalizeAll gives cloned nodes their own identity (host name, SSH host keys,
-// machine-id, password, authorized keys) and reboots them.
+// personalizeAll completes the identity of cloned nodes (host name, SSH host
+// keys, machine-id, password, authorized keys). Nodes from current base images
+// received it on their first boot; nodes from base images built before the
+// first-boot hook are personalized over SSH and rebooted.
 func (c *Cluster) personalizeAll(ctx context.Context) error {
 	pub, err := c.Dir.ReadSecret(secretKey + ".pub")
 	if err != nil {
@@ -76,19 +79,23 @@ func (c *Cluster) personalize(ctx context.Context, name string, keys []string, m
 		ns.Pending, ns.HostKey = false, ""
 		mu.Unlock()
 	}
-	// A previous run may have personalized the node already (golden key gone).
-	if s, err := c.dial(ctx, name, c.signer, ""); err == nil {
-		out, rerr := s.Run("cat " + golden.IdentityMarker + " 2>/dev/null || true")
-		s.Close()
-		if rerr == nil && strings.TrimSpace(out) == name {
-			done()
-			return c.finishIdentity(ctx, name)
-		}
-	}
-	s, err := c.waitSSH(ctx, name, 5*time.Minute) // golden key while pending
+	// The cluster key works once the node has its identity (first-boot hook or a
+	// previous run); until then only the base image's key does.
+	s, err := c.waitSSH(ctx, name, 5*time.Minute)
 	if err != nil {
 		return err
 	}
+	out, err := s.Run("cat " + golden.IdentityMarker + " 2>/dev/null || true")
+	if err != nil {
+		s.Close()
+		return err
+	}
+	if strings.TrimSpace(out) == name {
+		s.Close()
+		done()
+		return c.finishIdentity(ctx, name)
+	}
+	// A base image from before the first-boot hook: personalize over SSH.
 	bootID, err := s.Run("cat /proc/sys/kernel/random/boot_id")
 	if err == nil {
 		_, err = s.Run(golden.Personalize(name, c.Cfg.Proxmox.Domain, c.password, keys))

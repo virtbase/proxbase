@@ -3,14 +3,17 @@ package golden
 import (
 	"fmt"
 	"strings"
+
+	"github.com/virtbase/proxbase/internal/firstboot"
 )
 
-// IdentityMarker exists on nodes that were personalized.
-const IdentityMarker = "/etc/proxbase-identity"
+// IdentityMarker exists on nodes that were personalized; it holds the node name.
+const IdentityMarker = firstboot.IdentityMarker
 
-// Personalize returns the script that gives a node cloned from a base image its
-// own identity. The node must reboot afterwards (Proxmox services read the host
-// name at start); Finish completes it after the reboot.
+// Personalize returns the script that gives a node cloned from a base image of
+// format 1 (built before the first-boot hook) its own identity. The node must
+// reboot afterwards (Proxmox services read the host name at start); Finish
+// completes it after the reboot.
 func Personalize(node, domain, password string, authorizedKeys []string) string {
 	fqdn := node + "." + domain
 	return fmt.Sprintf(`
@@ -18,6 +21,7 @@ node=%[1]s fqdn=%[2]s
 hostname "$node"
 echo "$node" > /etc/hostname
 sed -i "/^10\.0\.2\.15[[:space:]]/c\10.0.2.15 $fqdn $node" /etc/hosts
+sed -i "s/^search .*/search %[6]s/" /etc/resolv.conf
 echo "$fqdn" > /etc/mailname
 postconf -e "myhostname=$fqdn"
 rm -f /etc/ssh/ssh_host_*
@@ -28,7 +32,7 @@ echo "root:%[3]s" | chpasswd
 printf '%%s\n' %[4]s > /etc/pve/priv/authorized_keys
 echo "$node" > %[5]s
 systemd-run --on-active=2 systemctl reboot >/dev/null
-`, node, fqdn, password, shellQuote(authorizedKeys), IdentityMarker)
+`, node, fqdn, password, shellQuote(authorizedKeys), IdentityMarker, domain)
 }
 
 // Finish removes what is left of the base image's identity after the reboot and

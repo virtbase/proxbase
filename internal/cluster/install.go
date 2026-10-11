@@ -91,11 +91,33 @@ func (c *Cluster) install(ctx context.Context, img *image.Image, n config.Node, 
 	return c.runtime.Install(ctx, spec, vm.Media{ISO: img.ISO, Kernel: img.Kernel, Initrd: img.Initrd, Cmdline: img.Cmdline, AnswerDir: ansDir})
 }
 
+// startNode starts node n. A node cloned from a base image that has no identity yet
+// gets it as a guest file, which the first-boot hook applies.
+func (c *Cluster) startNode(ctx context.Context, n config.Node) error {
+	spec := c.spec(n)
+	if !c.St.Node(n.Name).Pending || c.runtime.Running(spec) {
+		return c.runtime.Start(ctx, spec)
+	}
+	pub, err := c.Dir.ReadSecret(secretKey + ".pub")
+	if err != nil {
+		return err
+	}
+	keys := append([]string{pub}, c.Cfg.Proxmox.SSHKeys...)
+	path := filepath.Join(spec.RunDir, n.Name+"-identity")
+	if err := os.WriteFile(path, firstboot.Identity(n.Name, c.Cfg.Proxmox.Domain, c.password, keys), 0o600); err != nil {
+		return err
+	}
+	// QEMU reads the file at start; it holds the root password, so drop it then.
+	defer os.Remove(path)
+	spec.Files = append(spec.Files, vm.File{Name: firstboot.FileIdentity, Path: path})
+	return c.runtime.Start(ctx, spec)
+}
+
 // bootAll starts every node and waits for SSH.
 func (c *Cluster) bootAll(ctx context.Context) error {
 	c.step("booting nodes")
 	for _, n := range c.Cfg.NodeList() {
-		if err := c.runtime.Start(ctx, c.spec(n)); err != nil {
+		if err := c.startNode(ctx, n); err != nil {
 			return err
 		}
 	}

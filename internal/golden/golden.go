@@ -1,10 +1,14 @@
 // Package golden caches installed base images so new nodes skip the installer.
 //
-// A base image is an installed but never booted root disk, one per key (ISO,
-// root filesystem and size, installer locale). Nodes use qcow2 overlays on top of
-// it. Everything Proxmox VE generates on first boot (cluster CA, auth key, node
-// certificate, root SSH key) is therefore unique per node; what the installer
-// wrote (host name, SSH host keys, machine-id) is replaced by Personalize.
+// A base image is an installed root disk, one per key (ISO, root filesystem and
+// size, installer locale, baked Ceph release). Nodes use qcow2 overlays on top
+// of it. The image is booted once to bake it (package firstboot), but powers off
+// before any Proxmox VE service starts, so everything Proxmox VE generates on
+// first boot (cluster CA, auth key, node certificate, root SSH key) is unique per
+// node. What the installer wrote (host name, SSH host keys, machine-id) is
+// replaced on each clone's first boot by the first-boot hook, before networking
+// starts. Base images built before the hook existed are personalized over SSH
+// instead (Personalize), which costs a reboot.
 package golden
 
 import (
@@ -20,6 +24,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -28,6 +33,7 @@ import (
 
 	"github.com/virtbase/proxbase/internal/answer"
 	"github.com/virtbase/proxbase/internal/config"
+	"github.com/virtbase/proxbase/internal/firstboot"
 	"github.com/virtbase/proxbase/internal/image"
 	"github.com/virtbase/proxbase/internal/state"
 	"github.com/virtbase/proxbase/internal/vm"
@@ -36,7 +42,15 @@ import (
 // Hostname is the name nodes have before personalization.
 const Hostname = "golden"
 
-const format = "1" // bump when the build or personalization changes
+const format = "2" // bump when the build or personalization changes
+
+const bakeTimeout = 20 * time.Minute
+
+// Builder installs and bakes base images.
+type Builder interface {
+	vm.Installer
+	vm.Booter
+}
 
 // Base is a cached base image.
 type Base struct {
@@ -50,6 +64,7 @@ type Meta struct {
 	ISO        string    `json:"iso"`
 	Filesystem string    `json:"filesystem"`
 	Size       string    `json:"size"`
+	Ceph       string    `json:"ceph,omitempty"` // baked Ceph release
 	Created    time.Time `json:"created"`
 }
 
@@ -70,8 +85,16 @@ func (b Base) Signer() (ssh.Signer, error) {
 // Key identifies the base image for a node.
 func Key(cfg *config.Cluster, n config.Node, iso string) string {
 	h := sha256.Sum256([]byte(strings.Join([]string{format, filepath.Base(iso), n.Spec.RootDisk.Filesystem,
-		n.Spec.RootDisk.Size, cfg.Proxmox.Keyboard, cfg.Proxmox.Country, cfg.Proxmox.Timezone}, "\n")))
+		n.Spec.RootDisk.Size, cfg.Proxmox.Keyboard, cfg.Proxmox.Country, cfg.Proxmox.Timezone, cephRelease(cfg)}, "\n")))
 	return hex.EncodeToString(h[:8])
+}
+
+// cephRelease is the Ceph release baked into base images, if Ceph is used.
+func cephRelease(cfg *config.Cluster) string {
+	if !cfg.CephEnabled() {
+		return ""
+	}
+	return cfg.Storage.Ceph.Version
 }
 
 // Open returns an existing base image.
@@ -84,7 +107,7 @@ func Open(key string) (Base, error) {
 }
 
 // Ensure returns the base image for node n, installing it first if needed.
-func Ensure(ctx context.Context, inst vm.Installer, cfg *config.Cluster, n config.Node, img *image.Image, logf func(string, ...any)) (Base, error) {
+func Ensure(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node, img *image.Image, logf func(string, ...any)) (Base, error) {
 	key := Key(cfg, n, img.ISO)
 	if b, err := Open(key); err == nil {
 		return b, nil
@@ -103,10 +126,14 @@ func Ensure(ctx context.Context, inst vm.Installer, cfg *config.Cluster, n confi
 	if b, err := Open(key); err == nil { // built by another create meanwhile
 		return b, nil
 	}
-	logf("building base image %s (Proxmox VE %s, %s %s); later creates reuse it", key, img.Version, n.Spec.RootDisk.Filesystem, n.Spec.RootDisk.Size)
+	what := fmt.Sprintf("Proxmox VE %s, %s %s", img.Version, n.Spec.RootDisk.Filesystem, n.Spec.RootDisk.Size)
+	if c := cephRelease(cfg); c != "" {
+		what += ", Ceph " + c
+	}
+	logf("building base image %s (%s); later creates reuse it", key, what)
 	tmp := filepath.Join(imagesDir(), key+".tmp")
 	_ = os.RemoveAll(tmp)
-	if err := build(ctx, inst, cfg, n, img, key, tmp); err != nil {
+	if err := build(ctx, inst, cfg, n, img, key, tmp, logf); err != nil {
 		_ = os.RemoveAll(tmp)
 		return Base{}, err
 	}
@@ -117,7 +144,7 @@ func Ensure(ctx context.Context, inst vm.Installer, cfg *config.Cluster, n confi
 	return Base{Key: key, Dir: dir}, nil
 }
 
-func build(ctx context.Context, inst vm.Installer, cfg *config.Cluster, n config.Node, img *image.Image, key, dir string) error {
+func build(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node, img *image.Image, key, dir string, logf func(string, ...any)) error {
 	for _, sub := range []string{"run", "logs", "answer"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o700); err != nil {
 			return err
@@ -139,11 +166,16 @@ func build(ctx context.Context, inst vm.Installer, cfg *config.Cluster, n config
 	if spec.SSHPort, err = freePort(); err != nil {
 		return err
 	}
+	hook, err := firstboot.Serve()
+	if err != nil {
+		return err
+	}
+	defer hook.Close()
 	ans := answer.Render(answer.Params{
 		FQDN: Hostname + ".proxbase.invalid", Mailto: "root@proxbase.invalid",
 		Keyboard: cfg.Proxmox.Keyboard, Country: cfg.Proxmox.Country, Timezone: cfg.Proxmox.Timezone,
 		RootPassword: answer.Password(24), SSHKeys: []string{pub}, MAC: spec.NATMAC,
-		Filesystem: n.Spec.RootDisk.Filesystem,
+		Filesystem: n.Spec.RootDisk.Filesystem, FirstBootURL: hook.URL,
 	})
 	if err := os.WriteFile(filepath.Join(dir, "answer", "answer.toml"), []byte(ans), 0o600); err != nil {
 		return err
@@ -153,12 +185,54 @@ func build(ctx context.Context, inst vm.Installer, cfg *config.Cluster, n config
 		return fmt.Errorf("base image: %w", err)
 	}
 	_ = os.RemoveAll(filepath.Join(dir, "answer"))
+	ceph := cephRelease(cfg)
+	if err := bake(ctx, inst, spec, ceph, logf); err != nil {
+		return err
+	}
 	_ = os.RemoveAll(filepath.Join(dir, "run"))
-	meta, err := json.MarshalIndent(Meta{Key: key, ISO: filepath.Base(img.ISO), Filesystem: n.Spec.RootDisk.Filesystem, Size: n.Spec.RootDisk.Size, Created: time.Now().UTC()}, "", "  ")
+	meta, err := json.MarshalIndent(Meta{Key: key, ISO: filepath.Base(img.ISO), Filesystem: n.Spec.RootDisk.Filesystem, Size: n.Spec.RootDisk.Size, Ceph: ceph, Created: time.Now().UTC()}, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "meta.json"), meta, 0o644)
+}
+
+// bake boots the installed image once with the bake script; the first-boot hook
+// runs it and powers off, reporting the result on the serial console.
+func bake(ctx context.Context, b vm.Booter, spec vm.Spec, ceph string, logf func(string, ...any)) error {
+	if ceph != "" {
+		logf("baking base image: installing Ceph %s", ceph)
+	}
+	script := filepath.Join(spec.RunDir, "bake.sh")
+	if err := os.WriteFile(script, []byte(firstboot.Bake(ceph, spec.NATMAC)), 0o600); err != nil {
+		return err
+	}
+	spec.Files = []vm.File{{Name: firstboot.FileBake, Path: script}}
+	console, err := b.BootOnce(ctx, spec, bakeTimeout)
+	if err != nil {
+		return fmt.Errorf("bake base image: %w", err)
+	}
+	if !strings.Contains(string(console), firstboot.BakeOK) {
+		return fmt.Errorf("bake base image failed; serial console:\n%s", lastLines(string(console), 30))
+	}
+	return nil
+}
+
+// ansiRe matches terminal control sequences (GRUB draws its menu with them).
+var ansiRe = regexp.MustCompile(`\x1b(\[[0-9;?]*[ -/]*[@-~]|\][^\x07]*\x07|[()][0-9A-Za-z])`)
+
+// lastLines returns the last n non-empty lines of console output, indented.
+func lastLines(s string, n int) string {
+	var lines []string
+	for _, l := range strings.Split(ansiRe.ReplaceAllString(strings.ReplaceAll(s, "\r", ""), ""), "\n") {
+		if strings.TrimSpace(l) != "" {
+			lines = append(lines, l)
+		}
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return "  " + strings.Join(lines, "\n  ")
 }
 
 // writeKey creates the login key of nodes before personalization.
