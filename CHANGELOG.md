@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/virtbase/proxbase/compare/v0.2.0...v0.2.1) (2026-10-11)
+
+
+### Performance
+
+* faster provisioning and lower resource use ([#8](https://github.com/virtbase/proxbase/issues/8)) ([076717d](https://github.com/virtbase/proxbase/commit/076717d7bc7fa812145c87f9e09950c7f4343f52))
+
 ## [0.2.0](https://github.com/virtbase/proxbase/compare/v0.1.0...v0.2.0) (2026-10-09)
 
 
