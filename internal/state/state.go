@@ -47,6 +47,9 @@ type Snapshot struct {
 	Name    string    `json:"name"`
 	Created time.Time `json:"created"`
 	Nodes   []string  `json:"nodes"`
+	// Live snapshots were taken of the running cluster and include its memory;
+	// restoring one starts the cluster in that state.
+	Live bool `json:"live,omitempty"`
 }
 
 func (s *State) Snapshot(name string) *Snapshot {

@@ -83,6 +83,12 @@ type snapshotIn struct {
 	Name    string `json:"name" jsonschema:"snapshot name"`
 }
 
+type snapshotSaveIn struct {
+	Cluster string `json:"cluster,omitempty" jsonschema:"cluster name; default: the only cluster"`
+	Name    string `json:"name" jsonschema:"snapshot name"`
+	Live    bool   `json:"live,omitempty" jsonschema:"snapshot the running cluster with its memory; restoring it resumes the cluster in seconds"`
+}
+
 type snapshotsOut struct {
 	Snapshots []state.Snapshot `json:"snapshots"`
 }
@@ -130,8 +136,8 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_destroy", Description: "Delete a cluster: kill its VMs and remove all its disks, snapshots and credentials. Also stops a create running in the background. Set confirm to the cluster name.", Annotations: local(true, true)}, h.destroy)
 	mcp.AddTool(s, &mcp.Tool{Name: "node_exec", Description: "Run a shell command as root on a running node over SSH and return stdout, stderr and the exit code. Use it for pvesh, qm, pct, pvecm, ceph and the like. Non-interactive; output is capped at 64 KiB per stream.", Annotations: local(true, false)}, h.exec)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_env", Description: "Return what API and SSH clients need: API endpoint, API token (proxbase@pve!api, full privileges), the cluster CA certificate (PEM and path), SSH user, key path and ports per node. Root password only if includeRootPassword is set.", Annotations: readOnly}, h.env)
-	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_save", Description: "Snapshot all disks of a stopped cluster (call cluster_stop first). Restoring is much faster than creating again.", Annotations: local(false, false)}, h.snapshotOp((*cluster.Cluster).SnapshotSave, "saved"))
-	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_restore", Description: "Reset all disks of a stopped cluster to a snapshot (call cluster_stop first, cluster_start afterwards). Changes since the snapshot are lost.", Annotations: local(true, true)}, h.snapshotOp((*cluster.Cluster).SnapshotRestore, "restored"))
+	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_save", Description: "Snapshot all disks of a stopped cluster (call cluster_stop first), or with live=true the running cluster including its memory. Restoring is much faster than creating again.", Annotations: local(false, false)}, h.snapshotSave)
+	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_restore", Description: "Reset all disks of a stopped cluster to a snapshot (call cluster_stop first). Changes since the snapshot are lost. After a disk snapshot call cluster_start; a live snapshot starts the cluster in its saved state by itself.", Annotations: local(true, true)}, h.snapshotOp((*cluster.Cluster).SnapshotRestore, "restored"))
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_delete", Description: "Delete a snapshot of a cluster.", Annotations: local(true, true)}, h.snapshotOp((*cluster.Cluster).SnapshotDelete, "deleted"))
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_list", Description: "List the snapshots of a cluster.", Annotations: readOnly}, h.snapshots)
 	mcp.AddTool(s, &mcp.Tool{Name: "fault_apply", Description: "Inject a failure into a running cluster to test HA, fencing, Ceph or applications: kill, freeze, thaw, link-down, link-up, partition or degrade. fault_clear undoes them.", Annotations: local(true, false)}, h.fault)
@@ -304,6 +310,14 @@ func (h *handlers) snapshotOp(f func(*cluster.Cluster, context.Context, string) 
 		}
 		return nil, messageOut{Message: fmt.Sprintf("snapshot %s %s in %s", in.Name, done, time.Since(t0).Round(time.Millisecond))}, nil
 	}
+}
+
+func (h *handlers) snapshotSave(ctx context.Context, req *mcp.CallToolRequest, in snapshotSaveIn) (*mcp.CallToolResult, messageOut, error) {
+	save := (*cluster.Cluster).SnapshotSave
+	if in.Live {
+		save = (*cluster.Cluster).SnapshotSaveLive
+	}
+	return h.snapshotOp(save, "saved")(ctx, req, snapshotIn{Cluster: in.Cluster, Name: in.Name})
 }
 
 func (h *handlers) snapshots(_ context.Context, _ *mcp.CallToolRequest, in clusterIn) (*mcp.CallToolResult, snapshotsOut, error) {

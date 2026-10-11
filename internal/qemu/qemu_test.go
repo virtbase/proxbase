@@ -78,3 +78,16 @@ func TestOnceArgs(t *testing.T) {
 	s.Files = []vm.File{{Name: "opt/proxbase/bake", Path: "/r/bake.sh"}}
 	golden(t, "once.args", args(s, bootOnce, nil))
 }
+
+// A node started from a live snapshot loads it and waits paused for Resume.
+func TestLoadSnapshotArgs(t *testing.T) {
+	s := spec()
+	s.LoadSnapshot = "ready"
+	a := strings.Join(args(s, bootDaemon, nil), " ")
+	if !strings.Contains(a, " -loadvm ready -S") {
+		t.Fatalf("missing -loadvm ready -S in %s", a)
+	}
+	if strings.Contains(strings.Join(args(spec(), bootDaemon, nil), " "), "-loadvm") {
+		t.Fatal("-loadvm without LoadSnapshot")
+	}
+}

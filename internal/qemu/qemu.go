@@ -122,6 +122,9 @@ func args(s vm.Spec, b boot, media *vm.Media) []string {
 			"-serial", "chardev:ser0",
 			"-daemonize",
 		)
+		if s.LoadSnapshot != "" {
+			a = append(a, "-loadvm", s.LoadSnapshot, "-S")
+		}
 	}
 	return a
 }
