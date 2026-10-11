@@ -28,7 +28,7 @@ func doctorCmd() *cobra.Command {
 		Short: "Check that this host can run proxbase clusters",
 		Args:  cobra.NoArgs,
 		RunE: func(*cobra.Command, []string) error {
-			checks := []check{checkKVM(), checkNested(), checkQEMU(), checkQEMUImg(), checkMemory(), checkDisk(), checkPorts(portBase), checkSocketPath()}
+			checks := []check{checkKVM(), checkNested(), checkQEMU(), checkQEMUImg(), checkMemory(), checkKSM(), checkDisk(), checkPorts(portBase), checkSocketPath()}
 			failed := false
 			for _, c := range checks {
 				fmt.Printf("%-5s %-12s %s\n", c.status, c.name, c.detail)
@@ -117,6 +117,20 @@ func checkMemory() check {
 		}
 	}
 	return warn("memory", "MemAvailable not found")
+}
+
+// checkKSM reports whether the kernel merges identical memory pages. Nodes run
+// the same Proxmox VE, so with KSM they share much of their memory; QEMU already
+// marks guest memory as mergeable, but only root can turn KSM on.
+func checkKSM() check {
+	b, err := os.ReadFile("/sys/kernel/mm/ksm/run")
+	if err != nil {
+		return warn("ksm", "not available in this kernel")
+	}
+	if strings.TrimSpace(string(b)) != "1" {
+		return warn("ksm", "off; nodes share identical memory with it: echo 1 | sudo tee /sys/kernel/mm/ksm/run")
+	}
+	return ok("ksm", "on: identical memory pages of the nodes are shared")
 }
 
 func checkDisk() check {
