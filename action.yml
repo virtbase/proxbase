@@ -39,6 +39,11 @@ inputs:
   cache:
     description: Cache the ISO and base image with actions/cache
     default: "true"
+  template:
+    description: >-
+      Cache the ready cluster as a live snapshot (memory included) and resume it in
+      later runs instead of creating it; needs golden and cache
+    default: "false"
   verify-signature:
     description: Also verify the release signature with cosign (cosign must be installed)
     default: "false"
@@ -131,7 +136,38 @@ runs:
         restore-keys: |
           proxbase-${{ runner.os }}-${{ runner.arch }}-
 
+    - name: Template cache key
+      id: template
+      if: inputs.template == 'true'
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        CONFIG: ${{ inputs.config }}
+        INPUTS: ${{ inputs.nodes }}|${{ inputs.memory }}|${{ inputs.data-disks }}|${{ inputs.storage }}|${{ inputs.pve-version }}
+        VERSION: ${{ steps.install.outputs.version }}
+      run: |
+        set -euo pipefail
+        # A live snapshot only loads into the same QEMU on the same CPU model.
+        {
+          echo "$INPUTS"
+          [ -n "$CONFIG" ] && sha256sum < "$CONFIG"
+          qemu-system-x86_64 --version | head -n 1
+          grep -m 1 '^model name' /proc/cpuinfo
+          grep -m 1 '^flags' /proc/cpuinfo
+        } > "$RUNNER_TEMP/proxbase-template-key"
+        echo "key=proxbase-template-$NAME-$VERSION-$(sha256sum < "$RUNNER_TEMP/proxbase-template-key" | cut -c1-16)" >> "$GITHUB_OUTPUT"
+        echo "path=${XDG_DATA_HOME:-$HOME/.local/share}/proxbase/clusters/$NAME" >> "$GITHUB_OUTPUT"
+
+    - name: Restore cluster template
+      id: template-cache
+      if: inputs.template == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.template.outputs.path }}
+        key: ${{ steps.template.outputs.key }}
+
     - name: Create cluster
+      id: create
       shell: bash
       env:
         NAME: ${{ inputs.name }}
@@ -142,8 +178,17 @@ runs:
         STORAGE: ${{ inputs.storage }}
         PVE_VERSION: ${{ inputs.pve-version }}
         GOLDEN: ${{ inputs.golden }}
+        TEMPLATE: ${{ inputs.template }}
+        TEMPLATE_HIT: ${{ steps.template-cache.outputs.cache-hit }}
       run: |
         set -euo pipefail
+        if [ "$TEMPLATE_HIT" = true ]; then
+          if proxbase snapshot restore "$NAME" template; then
+            exit 0
+          fi
+          echo "::warning::could not resume the cached cluster template; creating the cluster"
+          proxbase destroy "$NAME" --yes
+        fi
         args=(create "$NAME")
         [ -n "$CONFIG" ] && args+=(-f "$CONFIG")
         [ -n "$NODES" ] && args+=(--nodes "$NODES")
@@ -162,6 +207,27 @@ runs:
           done
           exit 1
         fi
+        if [ "$TEMPLATE" = true ] && [ "$TEMPLATE_HIT" != true ]; then
+          # Snapshot the ready cluster, stop it so the disk images are not written
+          # while they are cached, and resume it from the snapshot after saving.
+          proxbase snapshot save "$NAME" template --live
+          proxbase stop "$NAME" --timeout 0
+          echo "save-template=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Save cluster template
+      if: steps.create.outputs.save-template == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.template.outputs.path }}
+        key: ${{ steps.template.outputs.key }}
+
+    - name: Resume cluster template
+      if: steps.create.outputs.save-template == 'true'
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+      run: proxbase snapshot restore "$NAME" template
 
     - name: Export credentials
       id: env

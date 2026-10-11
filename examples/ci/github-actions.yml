@@ -23,6 +23,7 @@ jobs:
           name: ci
           nodes: "1"
           # config: test/cluster.yaml   # or a cluster file
+          # template: "true"            # cache the ready cluster, resume it in seconds next time
 
       - name: Run tests
         env:
