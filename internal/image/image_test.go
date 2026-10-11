@@ -1,6 +1,11 @@
 package image
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 const grub = `menuentry 'Install Proxmox VE (Automated)' --class debian {
         echo        'Loading Proxmox VE Automatic Installer ...'
@@ -32,5 +37,66 @@ dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  proxmox-backup
 	}
 	if _, _, err := resolve(sums, "8.4"); err == nil {
 		t.Error("expected error for missing version")
+	}
+}
+
+// An exact version that is cached and verified must not touch the mirror.
+func TestEnsure_CachedExactVersionOffline(t *testing.T) {
+	t.Parallel()
+	cache := t.TempDir()
+	dir := filepath.Join(cache, "iso")
+	boot := filepath.Join(dir, "proxmox-ve_9.2-1")
+	if err := os.MkdirAll(boot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	iso := filepath.Join(dir, "proxmox-ve_9.2-1.iso")
+	files := map[string]string{
+		iso:                               "iso",
+		iso + ".sha256":                   strings.Repeat("a", 64) + " 3\n",
+		filepath.Join(boot, "linux26"):    "k",
+		filepath.Join(boot, "initrd.img"): "i",
+		filepath.Join(boot, "grub.cfg"):   grub,
+	}
+	for p, content := range files {
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	img, err := Ensure(t.Context(), "http://127.0.0.1:1", "9.2-1", cache, t.Logf)
+	if err != nil {
+		t.Fatalf("Ensure went to the (unreachable) mirror: %v", err)
+	}
+	if img.Version != "9.2-1" || img.ISO != iso {
+		t.Fatalf("got %+v", img)
+	}
+}
+
+func TestVerified(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		stamp string
+		want  bool
+	}{
+		{name: "matching size", stamp: strings.Repeat("a", 64) + " 3\n", want: true},
+		{name: "size changed", stamp: strings.Repeat("a", 64) + " 4\n", want: false},
+		{name: "no stamp", stamp: "", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := filepath.Join(t.TempDir(), "x.iso")
+			if err := os.WriteFile(p, []byte("iso"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tt.stamp != "" {
+				if err := os.WriteFile(p+".sha256", []byte(tt.stamp), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := verified(p); got != tt.want {
+				t.Errorf("verified = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

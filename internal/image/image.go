@@ -38,18 +38,23 @@ func Ensure(ctx context.Context, mirror, version, cacheDir string, logf Logf) (*
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	mirror = strings.TrimRight(mirror, "/")
-	sums, err := fetchSums(ctx, mirror, dir)
-	if err != nil {
-		return nil, err
-	}
-	file, sum, err := resolve(sums, version)
-	if err != nil {
-		return nil, err
-	}
+	file := "proxmox-ve_" + version + ".iso"
 	iso := filepath.Join(dir, file)
-	if err := ensureISO(ctx, mirror+"/"+file, iso, sum, logf); err != nil {
-		return nil, err
+	// An exact version that was downloaded and verified before needs no network.
+	if !isoRe.MatchString(file) || !verified(iso) {
+		mirror = strings.TrimRight(mirror, "/")
+		sums, err := fetchSums(ctx, mirror, dir)
+		if err != nil {
+			return nil, err
+		}
+		var sum string
+		if file, sum, err = resolve(sums, version); err != nil {
+			return nil, err
+		}
+		iso = filepath.Join(dir, file)
+		if err := ensureISO(ctx, mirror+"/"+file, iso, sum, logf); err != nil {
+			return nil, err
+		}
 	}
 	img := &Image{Version: strings.TrimSuffix(strings.TrimPrefix(file, "proxmox-ve_"), ".iso"), ISO: iso}
 	if err := extract(img, strings.TrimSuffix(iso, ".iso")); err != nil {
@@ -124,6 +129,21 @@ func resolve(sums map[string]string, version string) (file, sum string, err erro
 		return "", "", fmt.Errorf("no Proxmox VE ISO for version %s in SHA256SUMS", version)
 	}
 	return file, sum, nil
+}
+
+// verified reports whether path has a stamp from an earlier verification that
+// still matches its size.
+func verified(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	b, err := os.ReadFile(path + ".sha256")
+	if err != nil {
+		return false
+	}
+	f := strings.Fields(string(b))
+	return len(f) == 2 && len(f[0]) == 64 && f[1] == strconv.FormatInt(fi.Size(), 10)
 }
 
 func ensureISO(ctx context.Context, url, path, sum string, logf Logf) error {
