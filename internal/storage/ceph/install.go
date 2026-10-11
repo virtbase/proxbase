@@ -19,14 +19,21 @@ func installScript(version string) string {
 	return nodesetup.AptWait + fmt.Sprintf(`
 export DEBIAN_FRONTEND=noninteractive
 log=/var/log/proxbase-ceph-install.log
+pveceph_install() { { yes || true; } | pveceph install --repository no-subscription --version %[1]s >>$log 2>&1; }
 if ! [ -x /usr/bin/ceph-mon ] || ! ceph-mon --version 2>/dev/null | grep -q ' %[1]s '; then
-	if ! { yes || true; } | pveceph install --repository no-subscription --version %[1]s >$log 2>&1; then
-		tail -n 20 $log >&2; exit 1
+	if ! pveceph_install; then
+		# pveceph takes no apt options: retry past caches through apt's config.
+		nocache=/etc/apt/apt.conf.d/99proxbase-no-cache
+		echo 'Acquire::http::No-Cache "true";' > $nocache
+		if ! pveceph_install; then
+			rm -f $nocache; tail -n 20 $log >&2; exit 1
+		fi
+		rm -f $nocache
 	fi
 	echo installed
 fi
 before=$(dpkg-query -W -f '${Version}' libpve-storage-perl)
-if ! $apt install -y --only-upgrade libpve-storage-perl >>$log 2>&1; then
+if ! retry_apt $apt install -y --only-upgrade libpve-storage-perl >>$log 2>&1; then
 	tail -n 20 $log >&2; exit 1
 fi
 if [ "$before" != "$(dpkg-query -W -f '${Version}' libpve-storage-perl)" ]; then
@@ -38,7 +45,7 @@ fi
 
 // install runs the install script on all nodes in parallel.
 func (b *Backend) install(ctx context.Context, h storage.Host) error {
-	script := installScript(b.cfg.Version)
+	script := h.AptEnv() + installScript(b.cfg.Version)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, n := range h.Nodes() {
 		g.Go(func() error {

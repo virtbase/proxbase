@@ -44,7 +44,7 @@ func (c *Cluster) configureNodes(ctx context.Context, provisioning bool) error {
 				return nil
 			}
 			t0 := time.Now()
-			out, err = s.Run(nodesetup.Upgrade)
+			out, err = s.Run(c.aptEnv() + nodesetup.Upgrade)
 			if err != nil {
 				return fmt.Errorf("%s: dist-upgrade: %w", n.Name, err)
 			}

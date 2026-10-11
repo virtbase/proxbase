@@ -133,9 +133,12 @@ rm -f /etc/dpkg/dpkg.cfg.d/proxbase-unsafe-io
 
 // AptWait waits for apt runs started by PVE itself (pveupdate right after boot)
 // and sets $apt to an apt-get that waits for locks and retries downloads.
+// retry_apt runs an apt command again past any cache if it fails: a broken
+// download (Hash Sum mismatch) is then fetched anew, also by the host's cache.
 const AptWait = `
-for i in $(seq 300); do pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null || break; sleep 2; done
+for _ in $(seq 300); do pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null || break; sleep 2; done
 apt='apt-get -o DPkg::Lock::Timeout=600 -o Acquire::Retries=3'
+retry_apt() { "$@" || "$@" -o Acquire::http::No-Cache=true; }
 `
 
 // Upgrade brings a node to the newest no-subscription packages and prints the
@@ -143,7 +146,7 @@ apt='apt-get -o DPkg::Lock::Timeout=600 -o Acquire::Retries=3'
 const Upgrade = AptWait + `
 export DEBIAN_FRONTEND=noninteractive
 log=/var/log/proxbase-upgrade.log
-if ! { $apt update && $apt -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade; } >$log 2>&1; then
+if ! { $apt update && retry_apt $apt -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade; } >$log 2>&1; then
 	tail -n 20 $log >&2; exit 1
 fi
 grep -E '^[0-9]+ upgraded' $log || true

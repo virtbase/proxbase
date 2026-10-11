@@ -189,6 +189,8 @@ func (h host) SSH(ctx context.Context, node string) (*remote.SSH, error) {
 
 func (h host) Step(format string, a ...any) { h.c.step(format, a...) }
 
+func (h host) AptEnv() string { return h.c.aptEnv() }
+
 // isAuthError reports whether an SSH dial failed because the key was rejected
 // (as opposed to the node not being up yet).
 func isAuthError(err error) bool {

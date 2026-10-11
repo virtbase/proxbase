@@ -42,6 +42,7 @@ type Proxmox struct {
 	SSHKeys  []string `yaml:"sshKeys,omitempty" json:"sshKeys,omitempty" jsonschema:"description=Extra public keys for root on every node"`
 	Upgrade  bool     `yaml:"upgrade,omitempty" json:"upgrade,omitempty" jsonschema:"description=Run apt dist-upgrade on every node before clustering"`
 	Golden   bool     `yaml:"goldenImage,omitempty" json:"goldenImage,omitempty" jsonschema:"description=Clone nodes from a cached installed base image instead of running the installer"`
+	AptCache *bool    `yaml:"aptCache,omitempty" json:"aptCache,omitempty" jsonschema:"description=Download packages that proxbase installs (upgrade and Ceph) once through a cache on the host; default true"`
 }
 
 type Nodes struct {

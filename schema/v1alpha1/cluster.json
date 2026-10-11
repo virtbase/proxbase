@@ -279,6 +279,10 @@
         "goldenImage": {
           "type": "boolean",
           "description": "Clone nodes from a cached installed base image instead of running the installer"
+        },
+        "aptCache": {
+          "type": "boolean",
+          "description": "Download packages that proxbase installs (upgrade and Ceph) once through a cache on the host; default true"
         }
       },
       "additionalProperties": false,

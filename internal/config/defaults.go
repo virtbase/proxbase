@@ -19,6 +19,9 @@ func (c *Cluster) SetDefaults() {
 	def(&p.Keyboard, "en-us")
 	def(&p.Country, "us")
 	def(&p.Domain, "proxbase.internal")
+	if p.AptCache == nil {
+		p.AptCache = ptr(true)
+	}
 
 	n := &c.Nodes
 	if n.Count == 0 {

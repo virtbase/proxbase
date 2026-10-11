@@ -21,6 +21,9 @@ type Host interface {
 	SSH(ctx context.Context, node string) (*remote.SSH, error)
 	// Step reports progress.
 	Step(format string, a ...any)
+	// AptEnv is a shell snippet to put before scripts that run apt on the nodes:
+	// it points apt at the host's package cache, if there is one.
+	AptEnv() string
 }
 
 // Backend sets up one kind of storage. Setup must be idempotent: it runs on

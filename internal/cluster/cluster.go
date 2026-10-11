@@ -17,6 +17,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/virtbase/proxbase/internal/answer"
+	"github.com/virtbase/proxbase/internal/aptcache"
 	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/network"
 	"github.com/virtbase/proxbase/internal/progress"
@@ -50,6 +51,7 @@ type Cluster struct {
 	password string
 	runtime  vm.Runtime
 	net      network.Switch
+	apt      *aptcache.Proxy // package cache for the nodes while create runs, or nil
 }
 
 func newCluster(d state.Dir, cfg *config.Cluster, st *state.State, p progress.Sink) (*Cluster, error) {
@@ -182,6 +184,14 @@ func (c *Cluster) step(format string, a ...any) {
 }
 
 func (c *Cluster) save() error { return c.Dir.Save(c.St) }
+
+// aptEnv points apt on the nodes at the package cache, if one runs.
+func (c *Cluster) aptEnv() string {
+	if c.apt == nil {
+		return ""
+	}
+	return "export http_proxy=" + c.apt.URL + "\n"
+}
 
 // storages returns the configured storage backends in setup order.
 func (c *Cluster) storages() []storage.Backend {

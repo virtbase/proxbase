@@ -107,7 +107,8 @@ func Open(key string) (Base, error) {
 }
 
 // Ensure returns the base image for node n, installing it first if needed.
-func Ensure(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node, img *image.Image, logf func(string, ...any)) (Base, error) {
+// aptEnv is put before the bake script's apt commands (see storage.Host.AptEnv).
+func Ensure(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node, img *image.Image, aptEnv string, logf func(string, ...any)) (Base, error) {
 	key := Key(cfg, n, img.ISO)
 	if b, err := Open(key); err == nil {
 		return b, nil
@@ -133,7 +134,7 @@ func Ensure(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Nod
 	logf("building base image %s (%s); later creates reuse it", key, what)
 	tmp := filepath.Join(imagesDir(), key+".tmp")
 	_ = os.RemoveAll(tmp)
-	if err := build(ctx, inst, cfg, n, img, key, tmp, logf); err != nil {
+	if err := build(ctx, inst, cfg, n, img, key, tmp, aptEnv, logf); err != nil {
 		_ = os.RemoveAll(tmp)
 		return Base{}, err
 	}
@@ -144,7 +145,7 @@ func Ensure(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Nod
 	return Base{Key: key, Dir: dir}, nil
 }
 
-func build(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node, img *image.Image, key, dir string, logf func(string, ...any)) error {
+func build(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node, img *image.Image, key, dir, aptEnv string, logf func(string, ...any)) error {
 	for _, sub := range []string{"run", "logs", "answer"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o700); err != nil {
 			return err
@@ -186,7 +187,7 @@ func build(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node
 	}
 	_ = os.RemoveAll(filepath.Join(dir, "answer"))
 	ceph := cephRelease(cfg)
-	if err := bake(ctx, inst, spec, ceph, logf); err != nil {
+	if err := bake(ctx, inst, spec, ceph, aptEnv, logf); err != nil {
 		return err
 	}
 	_ = os.RemoveAll(filepath.Join(dir, "run"))
@@ -199,12 +200,12 @@ func build(ctx context.Context, inst Builder, cfg *config.Cluster, n config.Node
 
 // bake boots the installed image once with the bake script; the first-boot hook
 // runs it and powers off, reporting the result on the serial console.
-func bake(ctx context.Context, b vm.Booter, spec vm.Spec, ceph string, logf func(string, ...any)) error {
+func bake(ctx context.Context, b vm.Booter, spec vm.Spec, ceph, aptEnv string, logf func(string, ...any)) error {
 	if ceph != "" {
 		logf("baking base image: installing Ceph %s", ceph)
 	}
 	script := filepath.Join(spec.RunDir, "bake.sh")
-	if err := os.WriteFile(script, []byte(firstboot.Bake(ceph, spec.NATMAC)), 0o600); err != nil {
+	if err := os.WriteFile(script, []byte(aptEnv+firstboot.Bake(ceph, spec.NATMAC)), 0o600); err != nil {
 		return err
 	}
 	spec.Files = []vm.File{{Name: firstboot.FileBake, Path: script}}

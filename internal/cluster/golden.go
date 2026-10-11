@@ -28,7 +28,7 @@ func (c *Cluster) cloneAll(ctx context.Context, img *image.Image, todo []config.
 	t0 := time.Now()
 	var names []string
 	for _, n := range todo {
-		base, err := golden.Ensure(ctx, builder, c.Cfg, n, img, c.step)
+		base, err := golden.Ensure(ctx, builder, c.Cfg, n, img, c.aptEnv(), c.step)
 		if err != nil {
 			return err
 		}

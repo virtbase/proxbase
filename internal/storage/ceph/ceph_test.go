@@ -54,3 +54,12 @@ func TestMemoryTargetScript(t *testing.T) {
 		})
 	}
 }
+
+func TestInstallScriptSyntax(t *testing.T) {
+	t.Parallel()
+	cmd := exec.CommandContext(t.Context(), "bash", "-n")
+	cmd.Stdin = strings.NewReader(installScript("squid"))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("bash -n: %v\n%s", err, out)
+	}
+}
