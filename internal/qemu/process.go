@@ -18,7 +18,7 @@ func (Runtime) Start(ctx context.Context, s vm.Spec) error {
 		return nil
 	}
 	cleanSockets(s)
-	out, err := exec.CommandContext(ctx, Binary, args(s, nil)...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, Binary, args(s, bootDaemon, nil)...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("start %s: %w: %s", s.Process, err, strings.TrimSpace(string(out)))
 	}

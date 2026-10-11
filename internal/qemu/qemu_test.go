@@ -40,21 +40,25 @@ func golden(t *testing.T, name string, args []string) {
 	}
 }
 
-func TestRunArgs(t *testing.T) { golden(t, "run.args", args(spec(), nil)) }
+func TestRunArgs(t *testing.T) { golden(t, "run.args", args(spec(), bootDaemon, nil)) }
 
 func TestInstallArgs(t *testing.T) {
 	s := spec()
 	s.Nested = false
-	golden(t, "install.args", args(s, &vm.Media{ISO: "/c/pve.iso", Kernel: "/c/linux26", Initrd: "/c/initrd.img", Cmdline: "ro quiet console=ttyS0,115200", AnswerDir: "/d/ans"}))
+	golden(t, "install.args", args(s, bootInstall, &vm.Media{ISO: "/c/pve.iso", Kernel: "/c/linux26", Initrd: "/c/initrd.img", Cmdline: "ro quiet console=ttyS0,115200", AnswerDir: "/d/ans"}))
 }
 
 // Devices shared by install and run must sit at the same PCI addresses.
 func TestStablePCI(t *testing.T) {
-	run := devices(args(spec(), nil))
-	inst := devices(args(spec(), &vm.Media{}))
-	for _, d := range run {
-		if strings.Contains(d, "addr=") && !slices.Contains(inst, d) {
-			t.Errorf("device %q missing or moved in install mode", d)
+	run := devices(args(spec(), bootDaemon, nil))
+	for mode, other := range map[string][]string{
+		"install": devices(args(spec(), bootInstall, &vm.Media{})),
+		"once":    devices(args(spec(), bootOnce, nil)),
+	} {
+		for _, d := range run {
+			if strings.Contains(d, "addr=") && !slices.Contains(other, d) {
+				t.Errorf("device %q missing or moved in %s mode", d, mode)
+			}
 		}
 	}
 }
@@ -67,4 +71,10 @@ func devices(args []string) []string {
 		}
 	}
 	return out
+}
+
+func TestOnceArgs(t *testing.T) {
+	s := spec()
+	s.Files = []vm.File{{Name: "opt/proxbase/bake", Path: "/r/bake.sh"}}
+	golden(t, "once.args", args(s, bootOnce, nil))
 }

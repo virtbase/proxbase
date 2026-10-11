@@ -48,8 +48,17 @@ const driveOpts = "cache=unsafe,discard=unmap,detect-zeroes=unmap"
 
 func dev(format string, a ...any) []string { return []string{"-device", fmt.Sprintf(format, a...)} }
 
-// args returns the command line; media != nil boots the installer.
-func args(s vm.Spec, media *vm.Media) []string {
+// boot selects how a node is started.
+type boot int
+
+const (
+	bootDaemon  boot = iota // installed node, daemonized with a console socket
+	bootInstall             // the installer from media, in the foreground
+	bootOnce                // installed node in the foreground until it powers off
+)
+
+// args returns the command line; media is only used by bootInstall.
+func args(s vm.Spec, b boot, media *vm.Media) []string {
 	cpu := "host"
 	if !s.Nested {
 		cpu += ",vmx=off,svm=off"
@@ -85,7 +94,12 @@ func args(s vm.Spec, media *vm.Media) []string {
 	}
 	a = append(a, "-qmp", "unix:"+qmpSocket(s)+",server=on,wait=off", "-pidfile", pidfile(s))
 
-	if media != nil {
+	for _, f := range s.Files {
+		a = append(a, "-fw_cfg", "name="+f.Name+",file="+f.Path)
+	}
+
+	switch b {
+	case bootInstall:
 		a = append(a,
 			"-drive", "if=none,id=cd,media=cdrom,readonly=on,file="+media.ISO,
 			"-device", "ide-cd,drive=cd,bus=ide.0",
@@ -96,7 +110,13 @@ func args(s vm.Spec, media *vm.Media) []string {
 			"-serial", "chardev:ser0",
 			"-no-reboot",
 		)
-	} else {
+	case bootOnce:
+		a = append(a,
+			"-chardev", "file,id=ser0,path="+consoleLog(s),
+			"-serial", "chardev:ser0",
+			"-no-reboot",
+		)
+	default:
 		a = append(a,
 			"-chardev", "socket,id=ser0,path="+console(s)+",server=on,wait=off,logfile="+consoleLog(s)+",logappend=on",
 			"-serial", "chardev:ser0",

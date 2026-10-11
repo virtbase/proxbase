@@ -37,6 +37,15 @@ type Spec struct {
 	NICs      []NIC
 	RunDir    string // pidfile, control and console sockets
 	LogDir    string // console, installer and runtime logs
+	// Files are handed to the guest at boot (QEMU fw_cfg); the guest reads them
+	// below /sys/firmware/qemu_fw_cfg/by_name/.
+	Files []File
+}
+
+// File is a host file passed to the guest under Name (e.g. "opt/proxbase/identity").
+type File struct {
+	Name string
+	Path string
 }
 
 // Disks returns the root disk followed by the data disks.
@@ -54,6 +63,12 @@ func MAC(node, nic int) string { return fmt.Sprintf("52:54:00:50:%02x:%02x", nod
 // Installer creates a node's disks and installs Proxmox VE onto them.
 type Installer interface {
 	Install(ctx context.Context, s Spec, m Media) error
+}
+
+// Booter boots an installed node once in the foreground and returns its serial
+// console output when it powers off, or fails after timeout.
+type Booter interface {
+	BootOnce(ctx context.Context, s Spec, timeout time.Duration) (console []byte, err error)
 }
 
 // Cloner creates a node's disks from an installed base image instead of installing.
