@@ -195,8 +195,11 @@ func (c *Cluster) repairJoins(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("%s: repair join: %w", n.Name, err)
 			}
-			if strings.Contains(out, "repaired") {
+			switch {
+			case strings.Contains(out, "repaired"):
 				c.step("%s: the cluster join left the node certificate missing or from another CA; issued a new one", n.Name)
+			case strings.Contains(out, "restarted"):
+				c.step("%s: pveproxy served an outdated certificate after the join; restarted it", n.Name)
 			}
 			return nil
 		})

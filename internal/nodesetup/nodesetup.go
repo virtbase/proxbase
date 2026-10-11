@@ -168,7 +168,8 @@ const Reboot = "systemd-run --on-active=2 systemctl reboot >/dev/null"
 // pveproxy, which then reject new tickets. RepairJoin issues a new node
 // certificate from the current cluster CA and restarts both services if the
 // certificate is missing or not signed by that CA, or the node's last join
-// failed. It prints "repaired" when it acted.
+// failed, and prints "repaired". If pveproxy serves another certificate than
+// /etc/pve holds, it restarts pveproxy and prints "restarted".
 const RepairJoin = `
 marker=/var/lib/proxbase-join-repaired
 join=$(grep ':clusterjoin:' /var/log/pve/tasks/index 2>/dev/null | tail -n 1 || true)
@@ -182,6 +183,14 @@ if [ -n "$failed" ] || [ ! -s /etc/pve/local/pve-ssl.key ] ||
 	systemctl restart pvedaemon pveproxy
 	if [ -n "$join" ]; then echo "$join" > $marker; fi
 	echo repaired
+	exit 0
+fi
+# pveproxy can also keep serving a certificate that /etc/pve no longer holds.
+fp() { openssl x509 -noout -fingerprint -sha256 2>/dev/null || true; }
+served=$(openssl s_client -connect 127.0.0.1:8006 </dev/null 2>/dev/null | fp)
+if [ "$served" != "$(fp < /etc/pve/local/pve-ssl.pem)" ]; then
+	systemctl restart pveproxy
+	echo restarted
 fi
 `
 
