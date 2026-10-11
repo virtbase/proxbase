@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -62,9 +63,18 @@ func (c *Cluster) formCluster(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	joiners, err := c.joinClients(ctx, api, nodes[1:])
+	if err != nil {
+		return err
+	}
+	// Joins run one at a time: concurrent joins race for the cluster lock.
+	members := len(nodes) - len(joiners)
 	for _, n := range nodes[1:] {
-		if err := c.join(ctx, api, first, n, fp); err != nil {
-			return err
+		if napi, ok := joiners[n.Name]; ok {
+			if err := c.join(ctx, api, napi, first, n, fp, members); err != nil {
+				return err
+			}
+			members++
 		}
 	}
 	if m, ok := c.Cfg.RoleNetwork(config.RoleMigration); ok {
@@ -89,33 +99,57 @@ func (c *Cluster) fingerprint(ctx context.Context, node string) (string, error) 
 	return pve.Fingerprint(certPEM)
 }
 
-// join adds node n unless it is a member already.
-func (c *Cluster) join(ctx context.Context, api *pve.Client, first, n config.Node, fp string) error {
+// joinClients logs in, in parallel, to the nodes that are not members yet.
+func (c *Cluster) joinClients(ctx context.Context, api *pve.Client, nodes []config.Node) (map[string]*pve.Client, error) {
 	_, members, err := api.ClusterStatus(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, ok := members[n.Name]; ok {
-		return nil
+	var mu sync.Mutex
+	out := map[string]*pve.Client{}
+	g, gctx := errgroup.WithContext(ctx)
+	for _, n := range nodes {
+		if _, ok := members[n.Name]; ok {
+			continue
+		}
+		g.Go(func() error {
+			napi, err := c.api(gctx, n.Name)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			out[n.Name] = napi
+			mu.Unlock()
+			return nil
+		})
 	}
+	return out, g.Wait()
+}
+
+// join adds node n to the cluster through its own API client napi. members is
+// the number of nodes in the cluster before the join.
+func (c *Cluster) join(ctx context.Context, api, napi *pve.Client, first, n config.Node, fp string, members int) error {
 	form := c.links(n)
 	c.step("joining %s (%s)", n.Name, describeLinks(form))
-	napi, err := c.api(ctx, n.Name)
-	if err != nil {
-		return err
-	}
 	form.Set("hostname", c.corosyncIP(first))
 	form.Set("password", c.password)
 	form.Set("fingerprint", fp)
-	// The cluster refuses joins until it is quorate.
-	if err := waitMember(ctx, api, first.Name, nil, "", 2*time.Minute); err != nil {
-		return err
+	for attempt := 1; ; attempt++ {
+		// The cluster refuses joins until it is quorate and /etc/pve is writable.
+		if err := c.waitNodeQuorate(ctx, first.Name, members, 2*time.Minute); err != nil {
+			return err
+		}
+		var upid string
+		if err := napi.Post(ctx, "/cluster/config/join", form, &upid); err != nil {
+			return fmt.Errorf("join %s: %w", n.Name, err)
+		}
+		err := waitMember(ctx, api, n.Name, napi, upid, 3*time.Minute)
+		// A join refused for lack of quorum changed nothing; try again.
+		if err == nil || attempt == 3 || !strings.Contains(err.Error(), "no quorum") {
+			return err
+		}
+		c.step("%s: join refused (the cluster had no quorum yet), retrying", n.Name)
 	}
-	var upid string
-	if err := napi.Post(ctx, "/cluster/config/join", form, &upid); err != nil {
-		return fmt.Errorf("join %s: %w", n.Name, err)
-	}
-	return waitMember(ctx, api, n.Name, napi, upid, 3*time.Minute)
 }
 
 // waitMember waits until node is listed online in a quorate cluster. If a join
@@ -154,32 +188,37 @@ func (c *Cluster) waitQuorum(ctx context.Context, timeout time.Duration) error {
 	want := c.Cfg.Nodes.Count
 	g, gctx := errgroup.WithContext(ctx)
 	for _, n := range c.Cfg.NodeList() {
-		g.Go(func() error {
-			var last string
-			err := retry.Do(gctx, timeout, 2*time.Second, func() error {
-				s, err := c.waitSSH(gctx, n.Name, time.Minute)
-				if err != nil {
-					return retry.Permanent(err)
-				}
-				out, err := s.Run(`pvecm status 2>&1 || true
-f=/etc/pve/.proxbase-write-test; if echo ok > $f 2>/dev/null; then rm -f $f; echo WRITABLE; fi`)
-				s.Close()
-				m := votesRe.FindStringSubmatch(out)
-				if err == nil && quorateRe.MatchString(out) && m != nil && m[1] == strconv.Itoa(want) && strings.Contains(out, "WRITABLE") {
-					return nil
-				}
-				last = out
-				return errors.New("no quorum")
-			})
-			if err != nil && gctx.Err() == nil && last != "" {
-				return fmt.Errorf("%s: no quorum after %s:\n%s", n.Name, timeout, last)
-			}
-			return err
-		})
+		g.Go(func() error { return c.waitNodeQuorate(gctx, n.Name, want, timeout) })
 	}
 	if err := g.Wait(); err != nil {
 		return err
 	}
 	c.step("cluster quorate: %d/%d votes, /etc/pve writable on every node", want, want)
 	return nil
+}
+
+// waitNodeQuorate waits until node is quorate with votes votes and can write
+// /etc/pve. The API reports quorum a moment before the cluster file system
+// accepts changes such as a join.
+func (c *Cluster) waitNodeQuorate(ctx context.Context, node string, votes int, timeout time.Duration) error {
+	var last string
+	err := retry.Do(ctx, timeout, time.Second, func() error {
+		s, err := c.waitSSH(ctx, node, time.Minute)
+		if err != nil {
+			return retry.Permanent(err)
+		}
+		out, err := s.Run(`pvecm status 2>&1 || true
+f=/etc/pve/.proxbase-write-test; if echo ok > $f 2>/dev/null; then rm -f $f; echo WRITABLE; fi`)
+		s.Close()
+		m := votesRe.FindStringSubmatch(out)
+		if err == nil && quorateRe.MatchString(out) && m != nil && m[1] == strconv.Itoa(votes) && strings.Contains(out, "WRITABLE") {
+			return nil
+		}
+		last = out
+		return errors.New("no quorum")
+	})
+	if err != nil && ctx.Err() == nil && last != "" {
+		return fmt.Errorf("%s: no quorum after %s:\n%s", node, timeout, last)
+	}
+	return err
 }
