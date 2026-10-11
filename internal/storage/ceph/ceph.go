@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -57,13 +58,9 @@ func (b *Backend) Setup(ctx context.Context, h storage.Host) error {
 	if err := b.install(ctx, h); err != nil {
 		return err
 	}
-	apis := map[string]*pve.Client{}
-	for _, n := range nodes {
-		api, err := h.API(ctx, n.Name)
-		if err != nil {
-			return err
-		}
-		apis[n.Name] = api
+	apis, err := clients(ctx, h)
+	if err != nil {
+		return err
 	}
 	first := nodes[0].Name
 	api := apis[first]
@@ -71,7 +68,7 @@ func (b *Backend) Setup(ctx context.Context, h storage.Host) error {
 		return err
 	}
 
-	// Monitors (up to three), a manager on every node; one at a time.
+	// Monitors (up to three) one at a time: each joins the quorum before the next.
 	var mons []named
 	if err := retry.Do(ctx, 2*time.Minute, 2*time.Second, func() error { return api.Get(ctx, "/nodes/"+first+"/ceph/mon", &mons) }); err != nil {
 		return fmt.Errorf("list ceph mon: %w", err)
@@ -83,14 +80,20 @@ func (b *Backend) Setup(ctx context.Context, h storage.Host) error {
 			}
 			mons = append(mons, named{Name: n.Name})
 		}
-		if err := daemon(ctx, h, apis[n.Name], api, n.Name, "mgr"); err != nil {
-			return err
-		}
+	}
+	if err := setMemoryTargets(ctx, h, first); err != nil {
+		return err
 	}
 
+	// Managers and OSDs on all nodes at once; neither edits shared configuration.
 	g, gctx := errgroup.WithContext(ctx)
 	for _, n := range nodes {
-		g.Go(func() error { return createOSDs(gctx, h, apis[n.Name], n.Name, b.cfg.OSDDisks) })
+		g.Go(func() error {
+			if err := daemon(gctx, h, apis[n.Name], api, n.Name, "mgr"); err != nil {
+				return err
+			}
+			return createOSDs(gctx, h, apis[n.Name], n.Name, b.cfg.OSDDisks)
+		})
 	}
 	if err := g.Wait(); err != nil {
 		return err
@@ -99,6 +102,7 @@ func (b *Backend) Setup(ctx context.Context, h storage.Host) error {
 		return err
 	}
 	if *b.cfg.CephFS {
+		// One at a time: creating an MDS rewrites ceph.conf without a lock.
 		for _, n := range nodes {
 			if err := daemon(ctx, h, apis[n.Name], api, n.Name, "mds"); err != nil {
 				return err
@@ -109,6 +113,60 @@ func (b *Backend) Setup(ctx context.Context, h storage.Host) error {
 		}
 	}
 	return b.Wait(ctx, h)
+}
+
+// clients logs in to every node's API in parallel.
+func clients(ctx context.Context, h storage.Host) (map[string]*pve.Client, error) {
+	nodes := h.Nodes()
+	list := make([]*pve.Client, len(nodes))
+	g, gctx := errgroup.WithContext(ctx)
+	for i, n := range nodes {
+		g.Go(func() error {
+			api, err := h.API(gctx, n.Name)
+			list[i] = api
+			return err
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	apis := make(map[string]*pve.Client, len(nodes))
+	for i, n := range nodes {
+		apis[n.Name] = list[i]
+	}
+	return apis, nil
+}
+
+// Lab memory targets. Ceph's defaults (4 GiB per OSD, 4 GiB MDS cache) are sized
+// for dedicated servers; the OSD and MDS grow their caches toward them, which
+// would push a node with a few GiB of RAM into the OOM killer. 2 GiB is about
+// the lowest OSD target Ceph developers recommend, 1 GiB the minimum MDS cache.
+var memoryTargets = []struct{ who, option, value string }{
+	{who: "osd", option: "osd_memory_target", value: "2147483648"},
+	{who: "mds", option: "mds_cache_memory_limit", value: "1073741824"},
+}
+
+// setMemoryTargets applies memoryTargets unless the option was set before, so
+// values changed by the user survive a later setup (node add).
+func setMemoryTargets(ctx context.Context, h storage.Host, node string) error {
+	s, err := h.SSH(ctx, node)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if _, err := s.Run(memoryTargetScript()); err != nil {
+		return fmt.Errorf("ceph: set memory targets: %w", err)
+	}
+	return nil
+}
+
+func memoryTargetScript() string {
+	var script strings.Builder
+	script.WriteString("dump=$(ceph config dump --format json)\n")
+	for _, t := range memoryTargets {
+		fmt.Fprintf(&script, "echo \"$dump\" | grep -q '\"name\": *\"%[2]s\"' || ceph config set %[1]s %[2]s %[3]s\n", t.who, t.option, t.value)
+	}
+	return script.String()
 }
 
 // init writes ceph.conf with the public and cluster networks unless it exists.
