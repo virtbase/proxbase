@@ -149,5 +149,30 @@ if [ "$new" != "$(uname -r)" ]; then echo "$new $(cat /proc/sys/kernel/random/bo
 // Reboot reboots two seconds later, so the SSH session can end cleanly.
 const Reboot = "systemd-run --on-active=2 systemctl reboot >/dev/null"
 
+// RepairJoin repairs what a cluster join can leave broken. The joining node
+// finishes its setup before the cluster file system has synced to it: files it
+// writes then (its key and certificate) can be lost, and if it believes the
+// cluster CA is missing it writes a new one, which leaves the other nodes with
+// certificates of the old CA. A failed join also skips restarting pvedaemon and
+// pveproxy, which then reject new tickets. RepairJoin issues a new node
+// certificate from the current cluster CA and restarts both services if the
+// certificate is missing or not signed by that CA, or the node's last join
+// failed. It prints "repaired" when it acted.
+const RepairJoin = `
+marker=/var/lib/proxbase-join-repaired
+join=$(grep ':clusterjoin:' /var/log/pve/tasks/index 2>/dev/null | tail -n 1 || true)
+failed=
+if [ -n "$join" ] && ! echo "$join" | grep -q ' OK$' && [ "$(cat $marker 2>/dev/null)" != "$join" ]; then
+	failed=1
+fi
+if [ -n "$failed" ] || [ ! -s /etc/pve/local/pve-ssl.key ] ||
+	! openssl verify -CAfile /etc/pve/pve-root-ca.pem /etc/pve/local/pve-ssl.pem >/dev/null 2>&1; then
+	pvecm updatecerts --force --silent
+	systemctl restart pvedaemon pveproxy
+	if [ -n "$join" ]; then echo "$join" > $marker; fi
+	echo repaired
+fi
+`
+
 // BootID prints the boot ID and the running kernel.
 const BootID = "cat /proc/sys/kernel/random/boot_id; uname -r"

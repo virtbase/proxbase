@@ -76,6 +76,7 @@ func (c *Cluster) create(ctx context.Context) error {
 		c.postInstall,
 		c.formCluster,
 		func(ctx context.Context) error { return c.waitQuorum(ctx, 5*time.Minute) },
+		c.repairJoins,
 		c.setupStorage,
 		c.ensureToken,
 		c.exportCA,

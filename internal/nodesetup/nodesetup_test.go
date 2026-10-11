@@ -66,6 +66,7 @@ func TestScriptsSyntax(t *testing.T) {
 		"ProvisionEnd":   ProvisionEnd,
 		"Upgrade":        Upgrade,
 		"PendingKernel":  PendingKernel,
+		"RepairJoin":     RepairJoin,
 	} {
 		t.Run(name, func(t *testing.T) {
 			cmd := exec.CommandContext(t.Context(), "bash", "-n")

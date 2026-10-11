@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/virtbase/proxbase/internal/config"
+	"github.com/virtbase/proxbase/internal/nodesetup"
 	"github.com/virtbase/proxbase/internal/pve"
 	"github.com/virtbase/proxbase/internal/retry"
 )
@@ -176,6 +177,31 @@ func waitMember(ctx context.Context, api *pve.Client, node string, joiner *pve.C
 		return fmt.Errorf("%s did not come online in the cluster within %s: %w", node, timeout, err)
 	}
 	return err
+}
+
+// repairJoins repairs what racing cluster joins left broken (see
+// nodesetup.RepairJoin): without it a node's API may have no certificate, one the
+// cluster CA does not vouch for, or reject every login.
+func (c *Cluster) repairJoins(ctx context.Context) error {
+	g, gctx := errgroup.WithContext(ctx)
+	for _, n := range c.Cfg.NodeList() {
+		g.Go(func() error {
+			s, err := c.waitSSH(gctx, n.Name, time.Minute)
+			if err != nil {
+				return err
+			}
+			defer s.Close()
+			out, err := s.Run(nodesetup.RepairJoin)
+			if err != nil {
+				return fmt.Errorf("%s: repair join: %w", n.Name, err)
+			}
+			if strings.Contains(out, "repaired") {
+				c.step("%s: the cluster join left the node certificate missing or from another CA; issued a new one", n.Name)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
 }
 
 var (
