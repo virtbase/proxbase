@@ -18,6 +18,9 @@ type Params struct {
 	SSHKeys      []string
 	MAC          string // MAC of the NAT NIC; only this NIC gets the static install-time address
 	Filesystem   string // zfs, ext4, xfs, btrfs
+	// FirstBootURL, if set, is a script the installer downloads and the
+	// installed system runs once on its first boot, before networking starts.
+	FirstBootURL string
 }
 
 // Render returns answer.toml. The NAT NIC uses QEMU user networking (10.0.2.0/24).
@@ -53,6 +56,13 @@ func Render(p Params) string {
 		w("zfs.raid = \"raid0\"")
 	case "btrfs":
 		w("btrfs.raid = \"raid0\"")
+	}
+	if p.FirstBootURL != "" {
+		w("")
+		w("[first-boot]")
+		w("source = \"from-url\"")
+		w("url = %s", quote(p.FirstBootURL))
+		w("ordering = \"before-network\"")
 	}
 	return b.String()
 }

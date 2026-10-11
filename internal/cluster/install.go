@@ -13,6 +13,7 @@ import (
 
 	"github.com/virtbase/proxbase/internal/answer"
 	"github.com/virtbase/proxbase/internal/config"
+	"github.com/virtbase/proxbase/internal/firstboot"
 	"github.com/virtbase/proxbase/internal/image"
 	"github.com/virtbase/proxbase/internal/vm"
 )
@@ -36,12 +37,17 @@ func (c *Cluster) installAll(ctx context.Context, img *image.Image) error {
 		names[i] = n.Name
 	}
 	c.step("installing Proxmox VE %s on %s (logs: %s)", img.Version, strings.Join(names, ", "), c.Dir.Log("<node>-install.log"))
+	hook, err := firstboot.Serve()
+	if err != nil {
+		return err
+	}
+	defer hook.Close()
 	var mu sync.Mutex
 	g, gctx := errgroup.WithContext(ctx)
 	for _, n := range todo {
 		g.Go(func() error {
 			t0 := time.Now()
-			if err := c.install(gctx, img, n); err != nil {
+			if err := c.install(gctx, img, n, hook.URL); err != nil {
 				return fmt.Errorf("%s: %w", n.Name, err)
 			}
 			mu.Lock()
@@ -55,7 +61,8 @@ func (c *Cluster) installAll(ctx context.Context, img *image.Image) error {
 }
 
 // install writes the node's answer file and runs the unattended installer.
-func (c *Cluster) install(ctx context.Context, img *image.Image, n config.Node) error {
+// The installed system runs the first-boot hook at hookURL.
+func (c *Cluster) install(ctx context.Context, img *image.Image, n config.Node, hookURL string) error {
 	ansDir := c.Dir.Disk(n.Name + "-answer")
 	if err := os.MkdirAll(ansDir, 0o700); err != nil {
 		return err
@@ -76,6 +83,7 @@ func (c *Cluster) install(ctx context.Context, img *image.Image, n config.Node) 
 		SSHKeys:      append([]string{pub}, c.Cfg.Proxmox.SSHKeys...),
 		MAC:          spec.NATMAC,
 		Filesystem:   n.Spec.RootDisk.Filesystem,
+		FirstBootURL: hookURL,
 	})
 	if err := os.WriteFile(filepath.Join(ansDir, "answer.toml"), []byte(ans), 0o600); err != nil {
 		return err

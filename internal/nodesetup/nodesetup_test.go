@@ -61,6 +61,7 @@ func TestScriptsSyntax(t *testing.T) {
 	cfg.SetDefaults()
 	for name, s := range map[string]string{
 		"Script":         Script(cfg, cfg.NodeList()[0]),
+		"Repositories":   Repositories,
 		"NoGrubTimeout":  NoGrubTimeout,
 		"ProvisionStart": ProvisionStart,
 		"ProvisionEnd":   ProvisionEnd,

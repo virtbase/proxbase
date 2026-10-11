@@ -65,18 +65,7 @@ block /etc/hosts "$(cat <<'EOF'
 systemctl enable --now serial-getty@ttyS0.service >/dev/null 2>&1
 %s
 # No-subscription repository instead of enterprise.
-codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
-for f in /etc/apt/sources.list.d/pve-enterprise.sources /etc/apt/sources.list.d/ceph.sources; do
-	if [ -f "$f" ] && ! grep -q '^Enabled: false' "$f"; then echo 'Enabled: false' >> "$f"; fi
-done
-cat > /etc/apt/sources.list.d/proxmox.sources <<EOF
-Types: deb
-URIs: http://download.proxmox.com/debian/pve
-Suites: $codename
-Components: pve-no-subscription
-Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
-EOF
-
+%s
 # Bridges for the internal networks.
 %scp /etc/network/interfaces /etc/network/interfaces.proxbase-new
 block /etc/network/interfaces.proxbase-new "$(cat <<EOF
@@ -89,8 +78,27 @@ else
 	ifreload -a
 	echo changed
 fi
-`, hosts.String(), NoGrubTimeout, nics.String(), ifaces.String())
+`, hosts.String(), NoGrubTimeout, Repositories, nics.String(), ifaces.String())
 }
+
+// Repositories replaces the enterprise repositories (they need a subscription)
+// with the no-subscription repository. A ceph.sources that already points
+// elsewhere (pveceph install, a baked base image) is left alone.
+const Repositories = `
+codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+for f in /etc/apt/sources.list.d/pve-enterprise.sources /etc/apt/sources.list.d/ceph.sources; do
+	if [ -f "$f" ] && grep -q 'enterprise.proxmox.com' "$f" && ! grep -q '^Enabled: false' "$f"; then
+		echo 'Enabled: false' >> "$f"
+	fi
+done
+cat > /etc/apt/sources.list.d/proxmox.sources <<EOF
+Types: deb
+URIs: http://download.proxmox.com/debian/pve
+Suites: $codename
+Components: pve-no-subscription
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+EOF
+`
 
 // NoGrubTimeout makes the node boot without waiting in the GRUB menu (Debian
 // waits 5 seconds), which shortens every reboot and start.

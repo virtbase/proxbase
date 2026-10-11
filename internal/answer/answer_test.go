@@ -30,6 +30,17 @@ func TestRenderExt4(t *testing.T) {
 	}
 }
 
+func TestRenderFirstBoot(t *testing.T) {
+	got := Render(Params{Filesystem: "zfs", FirstBootURL: "http://10.0.2.2:4242/first-boot"})
+	want := "\n[first-boot]\nsource = \"from-url\"\nurl = \"http://10.0.2.2:4242/first-boot\"\nordering = \"before-network\"\n"
+	if !strings.HasSuffix(got, want) {
+		t.Fatalf("got:\n%s\nwant suffix:\n%s", got, want)
+	}
+	if strings.Contains(Render(Params{Filesystem: "zfs"}), "[first-boot]") {
+		t.Fatal("no first-boot section without a URL")
+	}
+}
+
 func TestPassword(t *testing.T) {
 	if a, b := Password(20), Password(20); len(a) != 20 || a == b {
 		t.Fatalf("bad passwords %q %q", a, b)
