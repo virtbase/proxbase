@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/storage"
 )
@@ -32,16 +34,18 @@ func New(cfg *config.Cluster) *Backend {
 	return &Backend{Pools: cfg.Storage.ZFS}
 }
 
-// Setup creates missing pools on every node and the cluster storage entries,
-// keeping their node lists current.
+// Setup creates missing pools on every node (in parallel) and the cluster
+// storage entries, keeping their node lists current.
 func (b *Backend) Setup(ctx context.Context, h storage.Host) error {
 	nodes := h.Nodes()
-	var names []string
+	names := make([]string, 0, len(nodes))
+	g, gctx := errgroup.WithContext(ctx)
 	for _, n := range nodes {
 		names = append(names, n.Name)
-		if err := b.createPools(ctx, h, n.Name); err != nil {
-			return err
-		}
+		g.Go(func() error { return b.createPools(gctx, h, n.Name) })
+	}
+	if err := g.Wait(); err != nil {
+		return err
 	}
 	return b.registerStorage(ctx, h, nodes[0].Name, names, true)
 }
@@ -74,6 +78,23 @@ func (b *Backend) createPools(ctx context.Context, h storage.Host, node string) 
 		if err := api.PostTask(ctx, node, "/nodes/"+node+"/disks/zfs", form, 2*time.Minute); err != nil {
 			return fmt.Errorf("%s: create zfs pool %s: %w", node, z.Name, err)
 		}
+	}
+	return b.enableAutotrim(ctx, h, node)
+}
+
+// enableAutotrim lets the pools return freed blocks, so the disk images shrink.
+func (b *Backend) enableAutotrim(ctx context.Context, h storage.Host, node string) error {
+	s, err := h.SSH(ctx, node)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	var script strings.Builder
+	for _, z := range b.Pools {
+		fmt.Fprintf(&script, "zpool set autotrim=on %s\n", z.Name)
+	}
+	if _, err := s.Run(script.String()); err != nil {
+		return fmt.Errorf("%s: enable autotrim: %w", node, err)
 	}
 	return nil
 }
