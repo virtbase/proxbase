@@ -15,7 +15,7 @@ none
 -device
 VGA,bus=pcie.0,addr=0x1
 -drive
-if=none,id=root,file=/d/pve1-root.qcow2,format=qcow2,cache=unsafe,discard=unmap
+if=none,id=root,file=/d/pve1-root.qcow2,format=qcow2,cache=unsafe,discard=unmap,detect-zeroes=unmap
 -device
 virtio-blk-pci,drive=root,bus=pcie.0,addr=0x2,bootindex=1
 -device
@@ -32,8 +32,10 @@ virtio-net-pci,netdev=net0,mac=52:54:00:50:01:01,bus=pcie.0,addr=0x5
 rng-random,id=rng,filename=/dev/urandom
 -device
 virtio-rng-pci,rng=rng,bus=pcie.0,addr=0xe
+-device
+virtio-balloon-pci,id=balloon,free-page-reporting=on,bus=pcie.0,addr=0xf
 -drive
-if=none,id=data0,file=/d/pve1-data0.qcow2,format=qcow2,cache=unsafe,discard=unmap
+if=none,id=data0,file=/d/pve1-data0.qcow2,format=qcow2,cache=unsafe,discard=unmap,detect-zeroes=unmap
 -device
 virtio-blk-pci,drive=data0,bus=pcie.0,addr=0x10
 -qmp
