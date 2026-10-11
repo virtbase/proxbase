@@ -15,15 +15,19 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
+// Client is safe for concurrent use.
 type Client struct {
-	base   string
-	http   *http.Client
-	ticket string
-	csrf   string
-	token  string // "user@realm!id=secret"
+	base  string
+	http  *http.Client
+	token string // "user@realm!id=secret"; set before use
+
+	mu             sync.Mutex
+	ticket, csrf   string
+	user, password string // for logging in again
 }
 
 // Fingerprint returns the colon-separated SHA-256 fingerprint of a PEM certificate,
@@ -85,20 +89,26 @@ func newClient(port int, verify func(raw [][]byte) error) *Client {
 	}
 	return &Client{
 		base: fmt.Sprintf("https://127.0.0.1:%d/api2/json", port),
-		http: &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{TLSClientConfig: tlsCfg}},
+		http: &http.Client{
+			Timeout:   60 * time.Second,
+			Transport: &http.Transport{TLSClientConfig: tlsCfg, IdleConnTimeout: 30 * time.Second},
+		},
 	}
 }
 
 // Login gets a ticket for user (e.g. root@pam).
+// The client logs in again by itself when the ticket is rejected.
 func (c *Client) Login(ctx context.Context, user, password string) error {
 	var out struct {
 		Ticket string `json:"ticket"`
 		CSRF   string `json:"CSRFPreventionToken"`
 	}
-	if err := c.Do(ctx, http.MethodPost, "/access/ticket", url.Values{"username": {user}, "password": {password}}, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/access/ticket", url.Values{"username": {user}, "password": {password}}, &out); err != nil {
 		return err
 	}
-	c.ticket, c.csrf = out.Ticket, out.CSRF
+	c.mu.Lock()
+	c.ticket, c.csrf, c.user, c.password = out.Ticket, out.CSRF, user, password
+	c.mu.Unlock()
 	return nil
 }
 
@@ -131,7 +141,25 @@ func (c *Client) Delete(ctx context.Context, path string) error {
 	return c.Do(ctx, http.MethodDelete, path, nil, nil)
 }
 
+// Do sends a request and decodes the data of the response into out. A request
+// with a ticket that the node rejects (401) is sent once more after a new login:
+// right after a node joined a cluster, tickets can briefly fail to verify while
+// the cluster's auth key reaches it.
 func (c *Client) Do(ctx context.Context, method, path string, form url.Values, out any) error {
+	err := c.do(ctx, method, path, form, out)
+	c.mu.Lock()
+	user, password := c.user, c.password
+	c.mu.Unlock()
+	if !IsStatus(err, http.StatusUnauthorized) || c.token != "" || user == "" {
+		return err
+	}
+	if lerr := c.Login(ctx, user, password); lerr != nil {
+		return errors.Join(err, lerr)
+	}
+	return c.do(ctx, method, path, form, out)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, form url.Values, out any) error {
 	var body io.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -143,13 +171,16 @@ func (c *Client) Do(ctx context.Context, method, path string, form url.Values, o
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
+	c.mu.Lock()
+	ticket, csrf := c.ticket, c.csrf
+	c.mu.Unlock()
 	switch {
 	case c.token != "":
 		req.Header.Set("Authorization", "PVEAPIToken="+c.token)
-	case c.ticket != "":
-		req.AddCookie(&http.Cookie{Name: "PVEAuthCookie", Value: c.ticket}) //nolint:gosec // request cookie, attributes do not apply
+	case ticket != "":
+		req.AddCookie(&http.Cookie{Name: "PVEAuthCookie", Value: ticket}) //nolint:gosec // request cookie, attributes do not apply
 		if method != http.MethodGet {
-			req.Header.Set("CSRFPreventionToken", c.csrf)
+			req.Header.Set("CSRFPreventionToken", csrf)
 		}
 	}
 	resp, err := c.http.Do(req)
@@ -239,5 +270,11 @@ func (c *Client) WaitTask(ctx context.Context, node, upid string, timeout time.D
 	}
 }
 
-// SetToken switches the client to API token auth ("user@realm!id=secret").
+// SetToken switches the client to API token auth ("user@realm!id=secret"). Call
+// it before using the client.
 func (c *Client) SetToken(token string) { c.token = token }
+
+// WithToken returns a client for the same node that uses an API token.
+func (c *Client) WithToken(token string) *Client {
+	return &Client{base: c.base, http: c.http, token: token}
+}

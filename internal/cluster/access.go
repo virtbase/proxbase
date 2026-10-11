@@ -21,9 +21,7 @@ func (c *Cluster) ensureToken(ctx context.Context) error {
 		return err
 	}
 	if tok, err := c.Token(); err == nil && tok != "" {
-		probe := *api
-		probe.SetToken(tok)
-		if probe.Get(ctx, "/version", &struct{}{}) == nil {
+		if api.WithToken(tok).Get(ctx, "/version", &struct{}{}) == nil {
 			return nil
 		}
 	}
