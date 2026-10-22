@@ -37,6 +37,24 @@ func (p *progressLog) add(_ context.Context, req *mcp.ProgressNotificationClient
 	p.msgs = append(p.msgs, req.Params.Message)
 }
 
+// waitFor reports whether all wanted messages arrive within a few seconds.
+// Notifications are handled apart from responses, so they may trail the result.
+func (p *progressLog) waitFor(want ...string) ([]string, bool) {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		p.mu.Lock()
+		msgs := slices.Clone(p.msgs)
+		p.mu.Unlock()
+		if !slices.ContainsFunc(want, func(w string) bool { return !slices.Contains(msgs, w) }) {
+			return msgs, true
+		}
+		if time.Now().After(deadline) {
+			return msgs, false
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func connect(t *testing.T) (*mcp.ClientSession, *progressLog) {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
@@ -179,10 +197,8 @@ func TestCreateReportsJobProgress(t *testing.T) {
 	if !res.IsError || !strings.Contains(text(res), "boom") || !strings.Contains(text(res), "cluster_create name=lab") {
 		t.Errorf("create result: %s", text(res))
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if !slices.Contains(p.msgs, "[   1s] pve1 installed in 1s") || !slices.Contains(p.msgs, "error: boom") {
-		t.Errorf("progress notifications: %q", p.msgs)
+	if msgs, ok := p.waitFor("[   1s] pve1 installed in 1s", "error: boom"); !ok {
+		t.Errorf("progress notifications: %q", msgs)
 	}
 
 	// The job has ended: waiting again reports its result at once.
