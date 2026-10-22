@@ -88,7 +88,8 @@ Clusters created in the container live in the `proxbase` volume; use
 | `task_list` | Proxmox VE tasks of every node or one, newest first; filters `errorsOnly`, `running`, `type`, `vmid`, `sinceMinutes` |
 | `task_log` | Status and the last `lines` of a task's log, by UPID |
 | `task_wait` | Wait for a task to end; returns its exit status and log, a failed task is an error |
-| `cluster_env` | API endpoint, token, CA certificate, SSH key and ports; root password only with `includeRootPassword` |
+| `cluster_env` | API endpoint, token, CA certificate, SSH key and ports; root password only with `includeRootPassword`; `token` returns a scoped token instead of the main one |
+| `token_create`, `token_list`, `token_delete` | Scoped API tokens with privilege separation: `role` on `path` (e.g. `PVEAuditor` on `/`, `PVEVMAdmin` on `/vms/100`), for least-privilege tests |
 | `snapshot_save`, `snapshot_restore`, `snapshot_delete`, `snapshot_list` | Snapshots of the stopped cluster, or with `live` of the running cluster including memory (restoring resumes it) |
 | `cluster_reset` | Back to a snapshot (default `baseline`) in one call: power off, restore, start or resume; returns the status |
 | `fault_apply`, `fault_clear` | kill, freeze, thaw, link-down/up, partition, degrade |
@@ -196,7 +197,8 @@ The server runs with the rights of the user who starts it and can create VMs,
 run commands as root inside them and delete clusters. It only talks to its client
 over stdio and opens no network port. `cluster_env` returns the API token (full
 privileges on the lab cluster) and, on request, the root password; treat the
-conversation accordingly. Progress and errors are logged to stderr.
+conversation accordingly. To give code under test less, hand it a scoped token from
+`token_create`. Progress and errors are logged to stderr.
 
 ## MCP registry
 

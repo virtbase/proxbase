@@ -11,7 +11,7 @@ import (
 )
 
 func envCmd() *cobra.Command {
-	var format, export string
+	var format, export, tokenName string
 	cmd := &cobra.Command{
 		Use:   "env [name]",
 		Short: "Print API endpoint and credentials for clients (shell, json, terraform)",
@@ -22,6 +22,9 @@ func envCmd() *cobra.Command {
 				return err
 			}
 			env, err := c.Env()
+			if tokenName != "" {
+				env, err = c.EnvWithToken(tokenName)
+			}
 			if err != nil {
 				return err
 			}
@@ -68,6 +71,7 @@ func envCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "shell", "shell|json|terraform (bpg/proxmox provider)")
+	cmd.Flags().StringVar(&tokenName, "token", "", "use this scoped token (proxbase token create) instead of the main one")
 	cmd.Flags().StringVar(&export, "export", "", "write id_ed25519, pve-root-ca.pem, api-token and env.sh into this directory (e.g. a mounted volume)")
 	return cmd
 }

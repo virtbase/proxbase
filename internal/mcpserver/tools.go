@@ -74,6 +74,7 @@ type execOut struct {
 type envIn struct {
 	Cluster             string `json:"cluster,omitempty" jsonschema:"cluster name; default: the only cluster"`
 	IncludeRootPassword bool   `json:"includeRootPassword,omitempty" jsonschema:"also return the root password of the nodes (only if needed, e.g. for root@pam API logins)"`
+	Token               string `json:"token,omitempty" jsonschema:"return this scoped token (token_create) instead of the main one"`
 }
 
 type envOut struct {
@@ -151,6 +152,9 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "file_get", Description: fileGetDescription, Annotations: readOnly}, h.fileGet)
 	mcp.AddTool(s, &mcp.Tool{Name: "node_add", Description: nodeAddDescription, Annotations: local(false, false)}, h.nodeAdd)
 	mcp.AddTool(s, &mcp.Tool{Name: "node_remove", Description: nodeRemoveDescription, Annotations: local(true, false)}, h.nodeRemove)
+	mcp.AddTool(s, &mcp.Tool{Name: "token_create", Description: tokenCreateDescription, Annotations: local(true, false)}, h.tokenCreate)
+	mcp.AddTool(s, &mcp.Tool{Name: "token_list", Description: "List the scoped API tokens of a cluster with their role and path (without secrets).", Annotations: readOnly}, h.tokenList)
+	mcp.AddTool(s, &mcp.Tool{Name: "token_delete", Description: "Delete a scoped API token and its grant. The main token proxbase@pve!api cannot be deleted.", Annotations: local(true, true)}, h.tokenDelete)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_env", Description: "Return what API and SSH clients need: API endpoint, API token (proxbase@pve!api, full privileges), the cluster CA certificate (PEM and path), SSH user, key path and ports per node. Root password only if includeRootPassword is set.", Annotations: readOnly}, h.env)
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_save", Description: "Snapshot all disks of a stopped cluster (call cluster_stop first), or with live=true the running cluster including its memory. Restoring is much faster than creating again.", Annotations: local(false, false)}, h.snapshotSave)
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_restore", Description: "Reset all disks of a stopped cluster to a snapshot (call cluster_stop first). Changes since the snapshot are lost. After a disk snapshot call cluster_start; a live snapshot starts the cluster in its saved state by itself.", Annotations: local(true, true)}, h.snapshotOp((*cluster.Cluster).SnapshotRestore, "restored"))
@@ -356,6 +360,9 @@ func (h *handlers) env(_ context.Context, _ *mcp.CallToolRequest, in envIn) (*mc
 		return nil, envOut{}, err
 	}
 	e, err := c.Env()
+	if in.Token != "" {
+		e, err = c.EnvWithToken(in.Token)
+	}
 	if err != nil {
 		return nil, envOut{}, err
 	}

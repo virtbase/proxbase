@@ -75,7 +75,8 @@ See [fault-injection.md](fault-injection.md).
 | `ssh [cluster] [node] [-- command…]` | SSH as root (default: first node) |
 | `cp <source> <destination>` | Copy a file to or from a node: `[cluster:]node:/path`, a local path or `-` (`--mode`) |
 | `console [cluster] <node>` | Serial console, Ctrl-] to detach |
-| `env [cluster]` | API endpoint and credentials: `--format shell\|json\|terraform`, `--export <dir>` |
+| `env [cluster]` | API endpoint and credentials: `--format shell\|json\|terraform`, `--export <dir>`, `--token <name>` for a scoped token |
+| `token create\|list\|delete [cluster] <name>` | Scoped API tokens: one role on one path (`--role PVEAuditor`, `--path /vms/100`, `--no-propagate`); `create` prints `tokenId=secret` |
 | `mcp` | MCP server on stdio for AI agents (`--call-timeout`, see [mcp.md](mcp.md#call-timeouts)) |
 
 ## Host and files

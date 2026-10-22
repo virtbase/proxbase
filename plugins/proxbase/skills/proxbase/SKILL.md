@@ -79,6 +79,9 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
   run long commands in the background (`nohup cmd >/root/job.log 2>&1 &`) and poll.
 - The API token has full privileges on the lab cluster; the root password is only
   returned with `includeRootPassword`. Keep credentials out of commits and answers.
+  To test with least privilege (or that an operation is refused), create a scoped
+  token with `token_create {"name": "ro", "role": "PVEAuditor"}` and pass its
+  `apiToken` (or `cluster_env {"token": "ro"}`) to the code under test.
 - Guests inside the nodes use nested virtualization: keep them small (512 MiB to
   1 GiB) so a 4 GiB node can run them.
 - Faults (`fault_apply`) stay until `fault_clear`; killed nodes need `cluster_start`.
@@ -98,7 +101,8 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 | `cluster_list`, `cluster_status` | `proxbase list`, `proxbase status <c> [-o json] [--check]` |
 | `cluster_plan` | `proxbase create <c> --nodes 3 --dry-run` |
 | `cluster_create` + `cluster_wait` | `proxbase create <c> --nodes 3 --golden --snapshot baseline --ttl 4h` (blocks) |
-| `cluster_env` | `proxbase env <c> [--format shell\|json\|terraform]` |
+| `cluster_env` | `proxbase env <c> [--format shell\|json\|terraform] [--token <name>]` |
+| `token_create`, `token_list`, `token_delete` | `proxbase token create <c> <name> --role PVEAuditor --path /` |
 | `node_exec` | `proxbase ssh <c> <node> -- <command>` |
 | `file_put`, `file_get` | `proxbase cp <file> <c>:<node>:/path`, `proxbase cp <c>:<node>:/path <file>` |
 | `node_add`, `node_remove` | `proxbase node add <c> --count 1`, `proxbase node remove <c> <node>` |

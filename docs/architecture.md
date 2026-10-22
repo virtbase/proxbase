@@ -190,6 +190,10 @@ server process, guarded by the same cluster lock as the CLI.
 - During setup the API client pins each node's certificate fingerprint (read over
   SSH); afterwards clients verify against the exported cluster CA, ignoring the host
   name because nodes are reached through `127.0.0.1`.
+- The main API token `proxbase@pve!api` has Administrator on `/`. Scoped tokens
+  (`proxbase token`) belong to the same user with privilege separation, so each may
+  only use the one role granted to it on its path; their values are stored in
+  `secrets/token-<name>`.
 
 ## State on disk
 

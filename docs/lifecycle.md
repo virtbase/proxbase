@@ -111,6 +111,8 @@ proxbase env lab                    # shell exports
 proxbase env lab --format json      # endpoint, token, CA, SSH key, root password, nodes
 proxbase env lab --format terraform # provider block for bpg/proxmox
 proxbase env lab --export ./creds   # id_ed25519, pve-root-ca.pem, api-token, env.sh
+proxbase token create lab ro --role PVEAuditor   # a token that may only read
+eval "$(proxbase env lab --token ro)"            # use it instead of the main token
 ```
 
 `proxbase ssh` checks host keys against those recorded at create time.
