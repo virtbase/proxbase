@@ -58,6 +58,8 @@ func (h *handlers) reset(ctx context.Context, req *mcp.CallToolRequest, in reset
 	if err := c.Stop(ctx, 0); err != nil {
 		return nil, resetOut{}, fmt.Errorf("power off: %w", err)
 	}
+	// Not cut short by the call limit: a live restore resumes all nodes together
+	// and must not stop halfway; it takes seconds.
 	if err := c.SnapshotRestore(ctx, name); err != nil {
 		return nil, resetOut{}, err
 	}
@@ -67,7 +69,13 @@ func (h *handlers) reset(ctx context.Context, req *mcp.CallToolRequest, in reset
 	}
 	var st statusOut
 	if live {
-		st = waitHealthy(ctx, c, within(beforeStatus(limit), resumeSettle))
+		wctx := ctx
+		if limit > 0 {
+			var cancel context.CancelFunc
+			wctx, cancel = context.WithTimeout(ctx, limit)
+			defer cancel()
+		}
+		st = waitHealthy(wctx, c, within(beforeStatus(limit), resumeSettle))
 	} else if st, err = startCluster(ctx, c, limit); err != nil {
 		return nil, resetOut{}, err
 	}
