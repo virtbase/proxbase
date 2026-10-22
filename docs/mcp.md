@@ -24,6 +24,14 @@ Cursor (`.cursor/mcp.json`) and other clients with the common format:
 }
 ```
 
+Codex (`~/.codex/config.toml`; see [call timeouts](#call-timeouts)):
+
+```toml
+[mcp_servers.proxbase]
+command = "proxbase"
+args = ["mcp"]
+```
+
 VS Code (`.vscode/mcp.json`):
 
 ```json
@@ -83,7 +91,8 @@ ISO and builds the base image. Many clients time out tool calls earlier, so:
   (`proxbase create --progress json`), follows it, and sends each step as an MCP
   progress notification if the client passed a progress token.
 - It returns when the cluster is ready or failed, or after `timeoutSeconds`
-  (default 600) with `running: true`; then `cluster_wait` continues.
+  (default 600, capped by the [call timeout](#call-timeouts)) with `running: true`;
+  then `cluster_wait` continues.
 - The job survives the MCP server: a restarted client can call `cluster_wait` or
   `cluster_status` (which shows the latest steps while it runs).
 - Cancelling `cluster_create` stops the create (SIGTERM); calling it again resumes.
@@ -91,6 +100,39 @@ ISO and builds the base image. Many clients time out tool calls earlier, so:
 
 The job log is `~/.local/share/proxbase/jobs/<cluster>.jsonl` (same events as
 `--progress json`); node install logs stay in the cluster's `logs/` directory.
+
+## Call timeouts
+
+Clients cancel tool calls that take too long: Codex after 60 seconds
+(`tool_timeout_sec`), others after a similar time. Claude Code waits and moves long
+calls to the background. So no call blocks longer than the call timeout:
+
+| Client | Call timeout |
+| --- | --- |
+| Claude Code (`clientInfo` name `claude-code`) | none |
+| All others | 50 s |
+| With `proxbase mcp --call-timeout 10m` | 10 minutes, for every client |
+
+Within it:
+
+- `cluster_create` and `cluster_wait` return with `running: true` and the create
+  continues in the background.
+- `cluster_start` returns `healthy: false` with what is still pending while the
+  nodes keep booting; `cluster_status` shows when it is healthy.
+- `cluster_stop` gives the nodes the call timeout minus 20 s for a clean shutdown,
+  then powers them off.
+- `node_exec` kills the command at the call timeout. Run longer commands in the
+  background (`nohup … >/root/job.log 2>&1 &`) and poll.
+
+With a longer client timeout, set `--call-timeout` a little below it, for Codex in
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.proxbase]
+command = "proxbase"
+args = ["mcp", "--call-timeout", "14m"]
+tool_timeout_sec = 900
+```
 
 ## Example session (abridged)
 

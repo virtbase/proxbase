@@ -46,7 +46,7 @@ type messageOut struct {
 
 type stopIn struct {
 	Cluster        string `json:"cluster,omitempty" jsonschema:"cluster name; default: the only cluster"`
-	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"time for a clean shutdown before powering off hard (default 180; nodes shut their guests down first)"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"time for a clean shutdown before powering off hard (default 180; nodes shut their guests down first; at most 30 for clients that cancel tool calls after a minute)"`
 }
 
 type destroyIn struct {
@@ -58,7 +58,7 @@ type execIn struct {
 	Cluster        string `json:"cluster,omitempty" jsonschema:"cluster name; default: the only cluster"`
 	Node           string `json:"node,omitempty" jsonschema:"node name, e.g. pve1 (default: the first node)"`
 	Command        string `json:"command" jsonschema:"shell command line, run as root through the login shell"`
-	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"kill the command after this many seconds (default 120, max 3600)"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"kill the command after this many seconds (default 120, max 3600; at most 50 for clients that cancel tool calls after a minute)"`
 }
 
 type execOut struct {
@@ -131,7 +131,7 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_status", Description: "Show a cluster: phase, quorum, nodes (running/online, IP, web UI URL, SSH port), Ceph health, active faults, and the progress of a create running in the background. healthy=true means ready, quorate, all nodes online and Ceph HEALTH_OK.", Annotations: readOnly}, h.status)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_create", Description: createDescription, Annotations: local(false, true)}, h.create)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_wait", Description: "Wait for a create running in the background (after cluster_create returned running=true), reporting its progress. Returns running=false with the status when it finished, or running=true again after timeoutSeconds.", Annotations: readOnly}, h.wait)
-	mcp.AddTool(s, &mcp.Tool{Name: "cluster_start", Description: "Boot a stopped cluster and wait for quorum, the API and storage. Also boots nodes killed by fault_apply kill.", Annotations: local(false, true)}, h.start)
+	mcp.AddTool(s, &mcp.Tool{Name: "cluster_start", Description: "Boot a stopped cluster and wait for quorum, the API and storage. Also boots nodes killed by fault_apply kill. If the call limit (50 s for clients that cancel tool calls after a minute) passes first, it returns healthy=false with what is pending while the nodes keep booting.", Annotations: local(false, true)}, h.start)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_stop", Description: "Shut all nodes of a cluster down (cleanly, then hard after the timeout). Disks are kept; cluster_start boots it again. Clears all faults.", Annotations: local(false, true)}, h.stop)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_destroy", Description: "Delete a cluster: kill its VMs and remove all its disks, snapshots and credentials. Also stops a create running in the background. Set confirm to the cluster name.", Annotations: local(true, true)}, h.destroy)
 	mcp.AddTool(s, &mcp.Tool{Name: "node_exec", Description: "Run a shell command as root on a running node over SSH and return stdout, stderr and the exit code. Use it for pvesh, qm, pct, pvecm, ceph and the like. Non-interactive; output is capped at 64 KiB per stream.", Annotations: local(true, false)}, h.exec)
@@ -204,19 +204,52 @@ func (h *handlers) start(ctx context.Context, req *mcp.CallToolRequest, in clust
 	if err != nil {
 		return nil, statusOut{}, err
 	}
-	if err := c.Start(ctx); err != nil {
-		return nil, statusOut{}, err
+	out, err := h.startCluster(ctx, req, c)
+	return nil, out, err
+}
+
+// statusMargin is the part of the call limit kept for reading the status, which
+// waits up to 10 seconds for the API.
+const statusMargin = 10 * time.Second
+
+// startCluster starts c within the call limit. When the limit passes first, the
+// nodes keep booting and the result says what is still pending.
+func (h *handlers) startCluster(ctx context.Context, req *mcp.CallToolRequest, c *cluster.Cluster) (statusOut, error) {
+	sctx := ctx
+	limit := h.limit(req)
+	if limit > 0 {
+		var cancel context.CancelFunc
+		sctx, cancel = context.WithTimeout(ctx, max(limit-statusMargin, limit/2))
+		defer cancel()
+	}
+	err := c.Start(sctx)
+	pending := err != nil && sctx.Err() != nil && ctx.Err() == nil
+	if err != nil && !pending {
+		return statusOut{}, err
 	}
 	s := c.Status(ctx)
-	return nil, statusOut{Status: s, Problem: s.Problem(), Healthy: s.Problem() == ""}, nil
+	out := statusOut{Status: s, Problem: s.Problem()}
+	out.Healthy = out.Problem == ""
+	if pending && !out.Healthy {
+		out.Problem = fmt.Sprintf("still starting after %s (%s); the nodes keep booting, call cluster_status until healthy", limit, out.Problem)
+	}
+	return out, nil
 }
+
+// stopMargin is the part of the call limit kept for powering nodes off hard
+// after the clean shutdown time.
+const stopMargin = 20 * time.Second
 
 func (h *handlers) stop(ctx context.Context, req *mcp.CallToolRequest, in stopIn) (*mcp.CallToolResult, messageOut, error) {
 	c, err := h.open(in.Cluster, h.sink(ctx, req))
 	if err != nil {
 		return nil, messageOut{}, err
 	}
-	if err := c.Stop(ctx, seconds(in.TimeoutSeconds, 180, 1800)); err != nil {
+	clean := seconds(in.TimeoutSeconds, 180, 1800)
+	if limit := h.limit(req); limit > 0 {
+		clean = min(clean, max(limit-stopMargin, 0))
+	}
+	if err := c.Stop(ctx, clean); err != nil {
 		return nil, messageOut{}, err
 	}
 	return nil, messageOut{Message: "cluster " + c.Cfg.Name + " stopped"}, nil
@@ -244,7 +277,7 @@ func (h *handlers) destroy(ctx context.Context, req *mcp.CallToolRequest, in des
 	return nil, messageOut{Message: "cluster " + in.Cluster + " destroyed"}, nil
 }
 
-func (h *handlers) exec(ctx context.Context, _ *mcp.CallToolRequest, in execIn) (*mcp.CallToolResult, execOut, error) {
+func (h *handlers) exec(ctx context.Context, req *mcp.CallToolRequest, in execIn) (*mcp.CallToolResult, execOut, error) {
 	c, err := h.open(in.Cluster, nil)
 	if err != nil {
 		return nil, execOut{}, err
@@ -253,12 +286,17 @@ func (h *handlers) exec(ctx context.Context, _ *mcp.CallToolRequest, in execIn) 
 	if node == "" {
 		node = c.St.Nodes[0].Name
 	}
-	timeout := seconds(in.TimeoutSeconds, 120, 3600)
+	requested := seconds(in.TimeoutSeconds, 120, 3600)
+	timeout := within(h.limit(req), requested)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	r, err := c.Exec(ctx, node, in.Command)
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = fmt.Errorf("%s: command killed after %s", node, timeout)
+		if timeout < requested {
+			err = fmt.Errorf("%w, the longest this client waits for a tool call; run longer commands in the background "+
+				"(nohup ... >/root/job.log 2>&1 &) and poll, or raise the client's tool timeout and start the server with --call-timeout", err)
+		}
 	}
 	if err != nil {
 		return nil, execOut{}, err

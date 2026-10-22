@@ -35,7 +35,8 @@ func TestE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Minute)
 	defer cancel()
 	p := &progressLog{}
-	cmd := exec.Command(bin, "mcp") //nolint:gosec // the binary under test, set by whoever runs the test
+	// This client waits for calls of any length.
+	cmd := exec.Command(bin, "mcp", "--call-timeout", "1h") //nolint:gosec // the binary under test, set by whoever runs the test
 	cmd.Stderr = os.Stderr
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "e2e"}, &mcp.ClientOptions{ProgressNotificationHandler: p.add}).
 		Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)

@@ -37,12 +37,12 @@ type createIn struct {
 	Storage        string `json:"storage,omitempty" jsonschema:"storage on the data disks: zfs, ceph or none"`
 	PVEVersion     string `json:"pveVersion,omitempty" jsonschema:"Proxmox VE ISO version, e.g. 9.2 or 9.2-1 (default: newest supported)"`
 	Golden         *bool  `json:"golden,omitempty" jsonschema:"clone nodes from a cached installed base image instead of installing each (default true; the first create builds the image)"`
-	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"return after this many seconds while the create keeps running (default 600, max 3600)"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"return after this many seconds while the create keeps running (default 600, max 3600; at most 50 for clients that cancel tool calls after a minute)"`
 }
 
 type waitIn struct {
 	Cluster        string `json:"cluster" jsonschema:"cluster name"`
-	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"return after this many seconds if the create is still running (default 600, max 3600)"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"return after this many seconds if the create is still running (default 600, max 3600; at most 50 for clients that cancel tool calls after a minute)"`
 }
 
 // jobOut is the state of a create in the background.
@@ -114,7 +114,7 @@ func (h *handlers) create(ctx context.Context, req *mcp.CallToolRequest, in crea
 	if err != nil {
 		return nil, jobOut{}, err
 	}
-	out, err := h.follow(ctx, req, j, exited, seconds(in.TimeoutSeconds, 600, 3600))
+	out, err := h.follow(ctx, req, j, exited, within(h.limit(req), seconds(in.TimeoutSeconds, 600, 3600)))
 	if ctx.Err() != nil {
 		// The create saves its state and exits; calling cluster_create again resumes it.
 		if serr := j.Signal(syscall.SIGTERM); serr != nil {
@@ -132,7 +132,7 @@ func (h *handlers) wait(ctx context.Context, req *mcp.CallToolRequest, in waitIn
 	if _, err := os.Stat(j.Log()); err != nil {
 		return nil, jobOut{}, fmt.Errorf("no create was started for cluster %q from MCP; see cluster_status", in.Cluster)
 	}
-	out, err := h.follow(ctx, req, j, nil, seconds(in.TimeoutSeconds, 600, 3600))
+	out, err := h.follow(ctx, req, j, nil, within(h.limit(req), seconds(in.TimeoutSeconds, 600, 3600)))
 	return nil, out, err
 }
 

@@ -36,15 +36,51 @@ Typical flow:
 Clusters persist across sessions; call cluster_list first to reuse one.
 The cluster file format is the resource ` + SchemaURI + `.`
 
+// Options configure the server.
+type Options struct {
+	// CallTimeout is the longest a tool call blocks. Operations that take longer
+	// return before it: a create keeps running in the background, a start reports
+	// what is still pending. Zero picks it per client: no limit for clients that
+	// wait for long calls, shortCallLimit for all others.
+	CallTimeout time.Duration
+}
+
+// shortCallLimit keeps tool calls below the 60-second timeout of clients such as
+// Codex, with room for the result to arrive.
+const shortCallLimit = 50 * time.Second
+
+// patientClients wait for tool calls of any length (by clientInfo name): Claude
+// Code moves long calls to the background instead of cancelling them.
+var patientClients = map[string]bool{"claude-code": true}
+
+// callLimit is how long a call of client may block; 0 means no limit.
+func callLimit(configured time.Duration, client *mcp.Implementation) time.Duration {
+	switch {
+	case configured > 0:
+		return configured
+	case client != nil && patientClients[client.Name]:
+		return 0
+	}
+	return shortCallLimit
+}
+
+// within caps d at limit (0 means no limit).
+func within(limit, d time.Duration) time.Duration {
+	if limit > 0 {
+		return min(d, limit)
+	}
+	return d
+}
+
 // New returns the server. log receives the progress of all operations as well
 // (e.g. for the client's server log on stderr).
-func New(version string, log progress.Sink) *mcp.Server {
+func New(version string, log progress.Sink, opts Options) *mcp.Server {
 	if log == nil {
 		log = progress.Discard
 	}
 	s := mcp.NewServer(&mcp.Implementation{Name: "proxbase", Title: "Proxbase", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
-	h := &handlers{log: log}
+	h := &handlers{log: log, callTimeout: opts.CallTimeout}
 	h.register(s)
 	s.AddResource(&mcp.Resource{
 		URI:         SchemaURI,
@@ -63,11 +99,19 @@ func New(version string, log progress.Sink) *mcp.Server {
 }
 
 // Run serves one client on stdin/stdout until it disconnects.
-func Run(ctx context.Context, version string, log progress.Sink) error {
-	return New(version, log).Run(ctx, &mcp.StdioTransport{})
+func Run(ctx context.Context, version string, log progress.Sink, opts Options) error {
+	return New(version, log, opts).Run(ctx, &mcp.StdioTransport{})
 }
 
-type handlers struct{ log progress.Sink }
+type handlers struct {
+	log         progress.Sink
+	callTimeout time.Duration // Options.CallTimeout
+}
+
+// limit is how long the call req may block; 0 means no limit.
+func (h *handlers) limit(req *mcp.CallToolRequest) time.Duration {
+	return callLimit(h.callTimeout, req.ClientInfo())
+}
 
 // sink forwards progress to the client (if it asked for it) and the server log.
 func (h *handlers) sink(ctx context.Context, req *mcp.CallToolRequest) progress.Sink {

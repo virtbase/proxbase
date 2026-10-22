@@ -15,12 +15,18 @@ import (
 )
 
 // The test binary stands in for proxbase when a tool starts a job: it prints
-// the progress events of a create that fails.
+// the progress events of a create that fails, or with "slow" of a create that
+// runs until it is stopped.
 func TestMain(m *testing.M) {
-	if os.Getenv("PROXBASE_FAKE_JOB") == "1" {
+	switch os.Getenv("PROXBASE_FAKE_JOB") {
+	case "1":
 		fmt.Fprintln(os.Stderr, `{"type":"step","cluster":"lab","message":"cluster lab: 1 node(s)","elapsed":0.1}`)
 		fmt.Fprintln(os.Stderr, `{"type":"step","cluster":"lab","node":"pve1","message":"pve1 installed in 1s","elapsed":1.2}`)
 		fmt.Fprintln(os.Stderr, `{"type":"error","error":"boom","hint":"Re-run `+"`proxbase create lab`"+` to resume"}`)
+		os.Exit(1)
+	case "slow":
+		fmt.Fprintln(os.Stderr, `{"type":"step","cluster":"lab","message":"installing pve1","elapsed":0.1}`)
+		time.Sleep(time.Minute)
 		os.Exit(1)
 	}
 	os.Exit(m.Run())
@@ -57,15 +63,21 @@ func (p *progressLog) waitFor(want ...string) ([]string, bool) {
 
 func connect(t *testing.T) (*mcp.ClientSession, *progressLog) {
 	t.Helper()
+	return connectAs(t, "test", Options{})
+}
+
+// connectAs connects a client with the given clientInfo name to a server with opts.
+func connectAs(t *testing.T, client string, opts Options) (*mcp.ClientSession, *progressLog) {
+	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	ctx := context.Background()
 	st, ct := mcp.NewInMemoryTransports()
-	if _, err := New("test", nil).Connect(ctx, st, nil); err != nil {
+	if _, err := New("test", nil, opts).Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 	p := &progressLog{}
-	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, &mcp.ClientOptions{ProgressNotificationHandler: p.add}).Connect(ctx, ct, nil)
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: client}, &mcp.ClientOptions{ProgressNotificationHandler: p.add}).Connect(ctx, ct, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +109,46 @@ func text(res *mcp.CallToolResult) string {
 		}
 	}
 	return b.String()
+}
+
+func TestCallLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured time.Duration
+		client     *mcp.Implementation
+		want       time.Duration
+	}{
+		{name: "client with a short timeout", client: &mcp.Implementation{Name: "codex-mcp-client"}, want: shortCallLimit},
+		{name: "no client info", want: shortCallLimit},
+		{name: "claude code", client: &mcp.Implementation{Name: "claude-code"}, want: 0},
+		{name: "configured overrides the client", configured: 5 * time.Minute, client: &mcp.Implementation{Name: "claude-code"}, want: 5 * time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := callLimit(tt.configured, tt.client); got != tt.want {
+				t.Errorf("callLimit(%s, %v) = %s, want %s", tt.configured, tt.client, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWithin(t *testing.T) {
+	tests := []struct {
+		name     string
+		limit, d time.Duration
+		want     time.Duration
+	}{
+		{name: "no limit", d: 10 * time.Minute, want: 10 * time.Minute},
+		{name: "below the limit", limit: time.Minute, d: 30 * time.Second, want: 30 * time.Second},
+		{name: "capped", limit: time.Minute, d: 10 * time.Minute, want: time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := within(tt.limit, tt.d); got != tt.want {
+				t.Errorf("within(%s, %s) = %s, want %s", tt.limit, tt.d, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestTools(t *testing.T) {
@@ -209,5 +261,22 @@ func TestCreateReportsJobProgress(t *testing.T) {
 	res, _ = call(t, cs, "cluster_wait", map[string]any{"cluster": "other"})
 	if !res.IsError || !strings.Contains(text(res), "no create") {
 		t.Errorf("wait without job: %s", text(res))
+	}
+}
+
+func TestCreateReturnsWithinCallLimit(t *testing.T) {
+	cs, _ := connectAs(t, "codex-mcp-client", Options{CallTimeout: 2 * time.Second})
+	t.Setenv("PROXBASE_FAKE_JOB", "slow")
+	t0 := time.Now()
+	res, out := call(t, cs, "cluster_create", map[string]any{"name": "lab", "timeoutSeconds": 600})
+	if d := time.Since(t0); d > 10*time.Second {
+		t.Errorf("create blocked for %s with a 2s call limit", d)
+	}
+	if res.IsError || out["running"] != true {
+		t.Errorf("create result: running=%v %s", out["running"], text(res))
+	}
+	// The create kept running in the background; destroying stops it.
+	if res, _ = call(t, cs, "cluster_destroy", map[string]any{"cluster": "lab", "confirm": "lab"}); res.IsError {
+		t.Errorf("destroy: %s", text(res))
 	}
 }

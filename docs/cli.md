@@ -70,7 +70,7 @@ See [fault-injection.md](fault-injection.md).
 | `ssh [cluster] [node] [-- command…]` | SSH as root (default: first node) |
 | `console [cluster] <node>` | Serial console, Ctrl-] to detach |
 | `env [cluster]` | API endpoint and credentials: `--format shell\|json\|terraform`, `--export <dir>` |
-| `mcp` | MCP server on stdio for AI agents ([mcp.md](mcp.md)) |
+| `mcp` | MCP server on stdio for AI agents (`--call-timeout`, see [mcp.md](mcp.md#call-timeouts)) |
 
 ## Host and files
 
