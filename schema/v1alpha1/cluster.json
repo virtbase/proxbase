@@ -11,7 +11,7 @@
         },
         "portBase": {
           "type": "integer",
-          "description": "Node n gets UI port portBase+n and SSH port portBase+100+n"
+          "description": "Node n gets UI port portBase+n and SSH port portBase+100+n; default: the first free range from 18000 in steps of 1000"
         },
         "bindAddress": {
           "type": "string",

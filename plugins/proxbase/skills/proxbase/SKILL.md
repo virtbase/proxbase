@@ -40,12 +40,10 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
        - {name: storage, cidr: 10.10.20.0/24, roles: [ceph-public, ceph-cluster]}
      storage:
        ceph: {enabled: true}
-     access: {portBase: 19000}
      ```
 
-   - Clusters that run at the same time need different ports: if a create fails
-     with "port … is in use", pass `config: "access: {portBase: 19000}"` (node N
-     gets the API on portBase+N and SSH on portBase+100+N).
+   - Each new cluster gets its own free port range; `cluster_plan` shows the ports,
+     the memory and disk a create needs and what the host has, without creating.
 3. **Connect the code under test** with `cluster_env`: endpoint, API token,
    CA certificate. In a shell, `eval "$(proxbase env <cluster>)"` exports
    `PROXMOX_VE_ENDPOINT`, `PROXMOX_VE_API_TOKEN`, `PROXBASE_CA_CERT` and more.
@@ -95,6 +93,7 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 | Tool | CLI |
 | --- | --- |
 | `cluster_list`, `cluster_status` | `proxbase list`, `proxbase status <c> [-o json] [--check]` |
+| `cluster_plan` | `proxbase create <c> --nodes 3 --dry-run` |
 | `cluster_create` + `cluster_wait` | `proxbase create <c> --nodes 3 --golden --snapshot baseline` (blocks) |
 | `cluster_env` | `proxbase env <c> [--format shell\|json\|terraform]` |
 | `node_exec` | `proxbase ssh <c> <node> -- <command>` |

@@ -132,6 +132,11 @@ func (d Dir) LoadConfig() (*config.Cluster, error) {
 		return nil, err
 	}
 	c.SetDefaults()
+	if c.Access.PortBase == 0 {
+		// Clusters always store their port base; files written before automatic
+		// port bases had the default.
+		c.Access.PortBase = config.DefaultPortBase
+	}
 	return c, nil
 }
 
@@ -161,6 +166,23 @@ func (d Dir) Save(s *State) error {
 		return err
 	}
 	return WriteFileAtomic(d.StateFile(), append(b, '\n'), 0o644)
+}
+
+// LockNew serializes setting up new clusters on this host, so that two creates
+// do not pick the same port range. It waits for the lock.
+func LockNew() (func(), error) {
+	if err := os.MkdirAll(DataHome(), 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(filepath.Join(DataHome(), "new.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() { f.Close() }, nil
 }
 
 // Lock takes an exclusive lock on the cluster for the lifetime of the process

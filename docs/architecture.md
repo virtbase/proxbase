@@ -109,6 +109,12 @@ sequenceDiagram
     CLI->>Node: end provisioning mode
 ```
 
+A new cluster first gets its ports: without `access.portBase` it takes the first
+base from 18000 in steps of 1000 whose ports are free and that no other cluster,
+running or stopped, uses. Creates hold a host lock (`new.lock`) from that choice until
+the cluster file claiming the range is written, so parallel creates do not collide;
+capacity shortages (memory, disk) are logged as warnings.
+
 Each step checks first and skips what is done, so a failed create resumes when run
 again. Progress (`installed` per node, phase, errors) is kept in `state.json`.
 
@@ -196,6 +202,7 @@ server process, guarded by the same cluster lock as the CLI.
 ├── disks/              <node>-root.qcow2, <node>-dataN.qcow2
 ├── run/                pidfiles, QMP/console sockets, switch and NIC sockets
 └── logs/               install, console, QEMU and switch logs
+~/.local/share/proxbase/new.lock   held while a new cluster chooses its ports
 ~/.local/share/proxbase/jobs/  <cluster>.jsonl, .pid, .cmd, .yaml of jobs started over MCP
 ~/.cache/proxbase/iso/     ISOs, SHA256SUMS, extracted installer files
 ~/.cache/proxbase/images/  golden base images (create --golden)

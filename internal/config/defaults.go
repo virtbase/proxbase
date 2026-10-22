@@ -82,9 +82,6 @@ func (c *Cluster) SetDefaults() {
 	if c.Access.APIToken == nil {
 		c.Access.APIToken = ptr(true)
 	}
-	if c.Access.PortBase == 0 {
-		c.Access.PortBase = 18000
-	}
 	def(&c.Access.BindAddress, "127.0.0.1")
 }
 

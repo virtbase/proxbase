@@ -21,6 +21,26 @@ func MemoryMiB(s string) (int, error) {
 	return v, nil
 }
 
+// DiskMiB parses a disk size such as "32G", "512M" or "1T".
+func DiskMiB(s string) (int, error) {
+	if len(s) < 2 {
+		return 0, fmt.Errorf("invalid disk size %q (want e.g. 32G)", s)
+	}
+	v, err := strconv.Atoi(s[:len(s)-1])
+	if err != nil || v <= 0 {
+		return 0, fmt.Errorf("invalid disk size %q (want e.g. 32G)", s)
+	}
+	switch s[len(s)-1] {
+	case 'M':
+		return v, nil
+	case 'G':
+		return v << 10, nil
+	case 'T':
+		return v << 20, nil
+	}
+	return 0, fmt.Errorf("invalid disk size %q (want e.g. 32G)", s)
+}
+
 // MaxNodeIndex is the highest node number in use.
 func (c *Cluster) MaxNodeIndex() int { return c.Nodes.Count + len(c.Nodes.Removed) }
 

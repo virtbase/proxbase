@@ -32,6 +32,10 @@ func TestDefaultsValid(t *testing.T) {
 	if ip, bits, _ := NodeIP(c.CorosyncNetwork().CIDR, 2); ip.String() != "10.10.10.12" || bits != 24 {
 		t.Fatalf("node ip: %s/%d", ip, bits)
 	}
+	if c.Access.PortBase != 0 {
+		t.Fatalf("portBase default %d, want 0 (assigned at create)", c.Access.PortBase)
+	}
+	c.Access.PortBase = DefaultPortBase
 	if ui, ssh := c.Ports(3); ui != 18003 || ssh != 18103 {
 		t.Fatalf("ports %d %d", ui, ssh)
 	}
@@ -230,6 +234,7 @@ func TestRemovedNodes(t *testing.T) {
 	if len(n) != 3 || n[0].Name != "pve1" || n[1].Name != "pve3" || n[2].Name != "pve4" || n[2].Index != 4 {
 		t.Fatalf("nodes: %+v", n)
 	}
+	c.Access.PortBase = DefaultPortBase
 	if ui, _ := c.Ports(n[1].Index); ui != 18003 {
 		t.Fatalf("pve3 must keep its port, got %d", ui)
 	}
@@ -273,5 +278,51 @@ func TestExamples(t *testing.T) {
 		if err := c.Validate(); err != nil {
 			t.Errorf("%s: %v", f, err)
 		}
+	}
+}
+
+func TestDiskMiB(t *testing.T) {
+	tests := []struct {
+		in   string
+		want int
+		ok   bool
+	}{
+		{"32G", 32 << 10, true},
+		{"512M", 512, true},
+		{"1T", 1 << 20, true},
+		{"0G", 0, false},
+		{"32", 0, false},
+		{"G", 0, false},
+		{"32K", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := DiskMiB(tt.in)
+			if (err == nil) != tt.ok || got != tt.want {
+				t.Errorf("DiskMiB(%q) = %d, %v; want %d, ok=%v", tt.in, got, err, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestPortBaseValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		base int
+		ok   bool
+	}{
+		{"automatic", 0, true},
+		{"explicit", 20000, true},
+		{"privileged", 80, false},
+		{"too high", 65500, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := load(t, "nodes: {count: 3}\n")
+			c.Access.PortBase = tt.base
+			if err := c.Validate(); (err == nil) != tt.ok {
+				t.Errorf("Validate with portBase %d: %v, want ok=%v", tt.base, err, tt.ok)
+			}
+		})
 	}
 }

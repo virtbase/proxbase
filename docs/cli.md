@@ -32,7 +32,7 @@ Flags of `create` and `up` (they override fields of the file, see
 | `--pve-version` | ISO version: `9.2` or `9.2-1` |
 | `--golden` | Clone nodes from a cached base image ([golden images](golden-images.md)) |
 | `--bind-address` | Address of the UI/SSH forwards (default `$PROXBASE_BIND_ADDRESS` or `127.0.0.1`) |
-| `--dry-run` | `create` only: print the resolved file (`-o yaml\|json`) |
+| `--dry-run` | `create` only: print the resolved file with the port base it would take (`-o yaml\|json`) and log the plan: ports, memory, disk, capacity warnings |
 | `--snapshot` | `create` only: save a live snapshot with this name when the cluster is ready (kept if it exists) |
 | `-o, --output` | `create` only: `table` or `json` |
 | `--stop-timeout` | `up` only: clean shutdown time on SIGTERM (default 2m) |

@@ -129,6 +129,7 @@ func (h *handlers) register(s *mcp.Server) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_list", Description: "List all proxbase clusters on this host with phase and running nodes.", Annotations: readOnly}, h.list)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_status", Description: "Show a cluster: phase, quorum, nodes (running/online, IP, web UI URL, SSH port), Ceph health, active faults, and the progress of a create running in the background. healthy=true means ready, quorate, all nodes online and Ceph HEALTH_OK.", Annotations: readOnly}, h.status)
+	mcp.AddTool(s, &mcp.Tool{Name: "cluster_plan", Description: planDescription, Annotations: readOnly}, h.plan)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_create", Description: createDescription, Annotations: local(false, true)}, h.create)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_wait", Description: "Wait for the background job of a cluster (after cluster_create, node_add or node_remove returned running=true), reporting its progress. Returns running=false with the status when it finished, or running=true again after timeoutSeconds.", Annotations: readOnly}, h.wait)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_start", Description: "Boot a stopped cluster and wait for quorum, the API and storage. Also boots nodes killed by fault_apply kill. If the call limit (50 s for clients that cancel tool calls after a minute) passes first, it returns healthy=false with what is pending while the nodes keep booting.", Annotations: local(false, true)}, h.start)

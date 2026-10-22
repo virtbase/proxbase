@@ -223,7 +223,7 @@ func (c *Cluster) Validate() error {
 		errs = append(errs, c.validateCeph(used)...)
 	}
 
-	if c.Access.PortBase < 1024 || c.Access.PortBase+100+c.MaxNodeIndex() > 65535 {
+	if b := c.Access.PortBase; b != 0 && (b < 1024 || b+100+c.MaxNodeIndex() > 65535) {
 		add("access.portBase: must be between 1024 and %d", 65535-100-c.MaxNodeIndex())
 	}
 	if a, err := netip.ParseAddr(c.Access.BindAddress); err != nil || !a.Is4() {

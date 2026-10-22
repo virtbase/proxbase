@@ -4,10 +4,12 @@ package doctor
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -104,25 +106,57 @@ func checkQEMUImg() Check {
 	return ok("qemu-img", "found")
 }
 
-func checkMemory() Check {
+// MemAvailableMiB returns the memory available for new processes.
+func MemAvailableMiB() (int, error) {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
-		return warn("memory", err.Error())
+		return 0, err
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		var kb int
 		if n, _ := fmt.Sscanf(sc.Text(), "MemAvailable: %d kB", &kb); n == 1 {
-			gib := float64(kb) / (1 << 20)
-			detail := fmt.Sprintf("%.1f GiB available (default node: 4 GiB)", gib)
-			if gib < 12 {
-				return warn("memory", detail+"; a 3-node cluster needs about 12 GiB")
-			}
-			return ok("memory", detail)
+			return kb >> 10, nil
 		}
 	}
-	return warn("memory", "MemAvailable not found")
+	if err := sc.Err(); err != nil {
+		return 0, err
+	}
+	return 0, errors.New("MemAvailable not found in /proc/meminfo")
+}
+
+// DiskFreeMiB returns the space available in the file system that holds dir or,
+// if it does not exist yet, its closest existing parent.
+func DiskFreeMiB(dir string) (int, string, error) {
+	for {
+		if _, err := os.Stat(dir); err == nil {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return 0, dir, err
+	}
+	return int(float64(st.Bavail) * float64(st.Bsize) / (1 << 20)), dir, nil
+}
+
+func checkMemory() Check {
+	mib, err := MemAvailableMiB()
+	if err != nil {
+		return warn("memory", err.Error())
+	}
+	gib := float64(mib) / 1024
+	detail := fmt.Sprintf("%.1f GiB available (default node: 4 GiB)", gib)
+	if gib < 12 {
+		return warn("memory", detail+"; a 3-node cluster needs about 12 GiB")
+	}
+	return ok("memory", detail)
 }
 
 // checkKSM reports whether the kernel merges identical memory pages. Nodes run
@@ -140,21 +174,11 @@ func checkKSM() Check {
 }
 
 func checkDisk() Check {
-	dir := state.DataHome()
-	for {
-		if _, err := os.Stat(dir); err == nil {
-			break
-		}
-		dir = dir[:strings.LastIndex(dir, "/")]
-		if dir == "" {
-			dir = "/"
-		}
-	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(dir, &st); err != nil {
+	mib, dir, err := DiskFreeMiB(state.DataHome())
+	if err != nil {
 		return warn("disk", err.Error())
 	}
-	gib := float64(st.Bavail) * float64(st.Bsize) / (1 << 30)
+	gib := float64(mib) / 1024
 	detail := fmt.Sprintf("%.0f GiB free in %s (about 4 GiB per node + 1.7 GiB ISO cache)", gib, dir)
 	if gib < 20 {
 		return warn("disk", detail)
@@ -173,7 +197,7 @@ func checkPorts(base int) Check {
 		l.Close()
 	}
 	if len(busy) > 0 {
-		return warn("ports", "in use: "+strings.Join(busy, ", ")+" (set access.portBase, or a cluster is running)")
+		return warn("ports", "in use: "+strings.Join(busy, ", ")+" (a cluster is running; new clusters take the next free range)")
 	}
 	return ok("ports", fmt.Sprintf("127.0.0.1:%d-%d and %d-%d free", base+1, base+3, base+101, base+103))
 }

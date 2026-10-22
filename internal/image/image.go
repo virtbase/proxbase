@@ -63,6 +63,22 @@ func Ensure(ctx context.Context, mirror, version, cacheDir string, logf Logf) (*
 	return img, nil
 }
 
+// Cached reports, without network access, whether a verified ISO for version
+// is in cacheDir; "9.2" resolves through the cached SHA256SUMS.
+func Cached(version, cacheDir string) bool {
+	dir := filepath.Join(cacheDir, "iso")
+	file := "proxmox-ve_" + version + ".iso"
+	if isoRe.MatchString(file) {
+		return verified(filepath.Join(dir, file))
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "SHA256SUMS"))
+	if err != nil {
+		return false
+	}
+	file, _, err = resolve(ParseSums(string(b)), version)
+	return err == nil && verified(filepath.Join(dir, file))
+}
+
 func httpGet(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

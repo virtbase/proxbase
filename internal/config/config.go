@@ -18,6 +18,11 @@ const (
 
 	DefaultMirror  = "https://enterprise.proxmox.com/iso"
 	DefaultVersion = "9.2"
+
+	// DefaultPortBase is the first port base new clusters try; without
+	// access.portBase they take the first free range from it in PortBaseStep.
+	DefaultPortBase = 18000
+	PortBaseStep    = 1000
 )
 
 type Cluster struct {
@@ -118,7 +123,7 @@ type ZFSPool struct {
 
 type Access struct {
 	APIToken    *bool  `yaml:"apiToken" json:"apiToken,omitempty" jsonschema:"description=Create API token proxbase@pve!api (default true)"`
-	PortBase    int    `yaml:"portBase" json:"portBase,omitempty" jsonschema:"description=Node n gets UI port portBase+n and SSH port portBase+100+n"`
+	PortBase    int    `yaml:"portBase,omitempty" json:"portBase,omitempty" jsonschema:"description=Node n gets UI port portBase+n and SSH port portBase+100+n; default: the first free range from 18000 in steps of 1000"`
 	BindAddress string `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty" jsonschema:"description=Host address the UI/SSH forwards listen on (default 127.0.0.1; 0.0.0.0 in the container image)"`
 }
 

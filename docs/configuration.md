@@ -143,7 +143,7 @@ Pool fields: `name`, `size` (`3`), `minSize` (`2`, or `size` if smaller), `pgNum
 
 | Field | Default | Notes |
 | --- | --- | --- |
-| `portBase` | `18000` | Node N: web UI/API on `portBase+N`, SSH on `portBase+100+N` |
+| `portBase` | first free range | Node N: web UI/API on `portBase+N`, SSH on `portBase+100+N`. Unset, a new cluster takes the first base from 18000 in steps of 1000 whose ports are free and that no other cluster (running or stopped) uses, and stores it |
 | `bindAddress` | `127.0.0.1` | Host address of the forwards; `0.0.0.0` in the container image |
 | `apiToken` | `true` | Create `proxbase@pve!api` with Administrator on `/` |
 

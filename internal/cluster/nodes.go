@@ -48,6 +48,7 @@ func (c *Cluster) AddNodes(ctx context.Context, count int) error {
 	if err := preflight(c.Cfg, added); err != nil {
 		return err
 	}
+	checkCapacity(c.Cfg, added, c.Progress)
 	for _, n := range added {
 		ui, ssh := c.Cfg.Ports(n.Index)
 		c.St.Nodes = append(c.St.Nodes, &state.NodeState{Name: n.Name, Index: n.Index, UIPort: ui, SSHPort: ssh})

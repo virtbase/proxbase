@@ -32,13 +32,8 @@ func Create(ctx context.Context, cfg *config.Cluster, p progress.Sink) (*Cluster
 			return nil, fmt.Errorf("cluster %q already exists", cfg.Name)
 		}
 		c.Progress.Logf("resuming unfinished create of %q (using its stored %s)", cfg.Name, d.Config())
-	} else {
-		if err := preflight(cfg, cfg.NodeList()); err != nil {
-			return nil, err
-		}
-		if c, err = initialize(cfg, p); err != nil {
-			return nil, err
-		}
+	} else if c, err = setUp(cfg, p); err != nil {
+		return nil, err
 	}
 	unlock, err := d.Lock()
 	if err != nil {
@@ -56,6 +51,25 @@ func Create(ctx context.Context, cfg *config.Cluster, p progress.Sink) (*Cluster
 	c.St.Phase, c.St.ReadyAt = state.PhaseReady, &now
 	c.St.Duration = time.Since(c.start).Round(time.Second).String()
 	return c, c.save()
+}
+
+// setUp checks the host for a new cluster and writes its state. It holds the
+// host lock for new clusters from choosing the port range until the cluster
+// file that claims it is written.
+func setUp(cfg *config.Cluster, p progress.Sink) (*Cluster, error) {
+	unlock, err := state.LockNew()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	if err := AssignPortBase(cfg); err != nil {
+		return nil, err
+	}
+	if err := preflight(cfg, cfg.NodeList()); err != nil {
+		return nil, err
+	}
+	checkCapacity(cfg, cfg.NodeList(), p)
+	return initialize(cfg, p)
 }
 
 // create runs all steps; each one skips what is already done.

@@ -22,7 +22,7 @@ Everything of a cluster lives in `~/.local/share/proxbase/clusters/<name>/`:
 | Symptom | Cause and fix |
 | --- | --- |
 | `KVM is required: … permission denied` | Add your user to the `kvm` group (or the group owning `/dev/kvm`) and log in again. In Docker: `group_add` with the host's kvm GID |
-| `port 18001 for pve1 is in use` | Another cluster or program uses the ports; set `access.portBase` |
+| `port 18001 for pve1 is in use` | Another program uses the ports of an explicit `access.portBase`; pick another or leave it unset (new clusters then take a free range) |
 | `socket path … is too long` | Unix socket paths are limited to 107 bytes; use a shorter `XDG_DATA_HOME` or cluster/network names |
 | Install times out or `installer reported failure` | Read `logs/<node>-install.log`; the last lines are also in the error |
 | `fetch checksums` fails | The ISO mirror is unreachable; set `proxmox.mirror`. An exact `proxmox.version` (`9.2-1`) that is cached needs no network |
