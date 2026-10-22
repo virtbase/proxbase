@@ -218,9 +218,13 @@ func (h *handlers) startCluster(ctx context.Context, req *mcp.CallToolRequest, c
 	sctx := ctx
 	limit := h.limit(req)
 	if limit > 0 {
-		var cancel context.CancelFunc
-		sctx, cancel = context.WithTimeout(ctx, max(limit-statusMargin, limit/2))
-		defer cancel()
+		// The whole call ends at the limit, the status included; the start
+		// leaves room for the status.
+		var cancelCall, cancelStart context.CancelFunc
+		ctx, cancelCall = context.WithTimeout(ctx, limit)
+		defer cancelCall()
+		sctx, cancelStart = context.WithTimeout(ctx, max(limit-statusMargin, limit/2))
+		defer cancelStart()
 	}
 	err := c.Start(sctx)
 	pending := err != nil && sctx.Err() != nil && ctx.Err() == nil
@@ -231,7 +235,8 @@ func (h *handlers) startCluster(ctx context.Context, req *mcp.CallToolRequest, c
 	out := statusOut{Status: s, Problem: s.Problem()}
 	out.Healthy = out.Problem == ""
 	if pending && !out.Healthy {
-		out.Problem = fmt.Sprintf("still starting after %s (%s); the nodes keep booting, call cluster_status until healthy", limit, out.Problem)
+		out.Problem = fmt.Sprintf("still starting after %s (%s); the nodes keep booting, call cluster_status until healthy",
+			limit.Round(time.Second), out.Problem)
 	}
 	return out, nil
 }
