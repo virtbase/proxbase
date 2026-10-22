@@ -42,6 +42,7 @@ type nodeReport struct {
 	FailedUnits []string     `json:"failedUnits,omitempty" jsonschema:"systemd units in the failed state"`
 	FailedTasks []failedTask `json:"failedTasks,omitempty" jsonschema:"tasks that ended with an error in the period, newest first; pve_get /nodes/<node>/tasks/<upid>/log shows a log"`
 	Errors      []string     `json:"errors,omitempty" jsonschema:"error log lines of the cluster services in the period, oldest first"`
+	Startup     int          `json:"startupErrors,omitempty" jsonschema:"error lines of the first 2 minutes after boot, left out: the services report each other while they start"`
 	Clock       string       `json:"clock,omitempty" jsonschema:"offset of the system clock from NTP time (chrony)"`
 	Ceph        []string     `json:"ceph,omitempty" jsonschema:"ceph health detail"`
 	Console     []string     `json:"console,omitempty" jsonschema:"end of the serial console of a node that is not running"`
@@ -58,9 +59,14 @@ type failedTask struct {
 const (
 	// diagnoseTimeout bounds the inspection of the nodes, which run in parallel.
 	diagnoseTimeout = 30 * time.Second
-	// maxErrors and maxFailedTasks are the most lines and tasks per node.
+	// maxErrors and maxFailedTasks are the most lines and tasks per node;
+	// the script reads more lines because startup errors are left out.
 	maxErrors      = 40
 	maxFailedTasks = 10
+	journalLines   = 400
+	// startupGrace is the time after boot whose errors are startup noise, such as
+	// pmxcfs failing to reach corosync until it runs.
+	startupGrace = 2 * time.Minute
 	// maxLine cuts long log lines.
 	maxLine = 300
 	// consoleLines is the end of the console of a stopped node.
@@ -73,6 +79,7 @@ var diagnoseUnits = []string{"corosync", "pve-cluster", "pveproxy", "pvedaemon",
 // diagnoseScript prints one section per finding, each after a "### name" line.
 func diagnoseScript(since time.Duration, ceph bool) string {
 	var b strings.Builder
+	b.WriteString("echo '### boot'; awk '/^btime/{print $2}' /proc/stat\n")
 	b.WriteString("echo '### quorum'; pvecm status 2>&1 | grep -E '^(Quorate|Expected votes|Total votes|Quorum):'\n")
 	b.WriteString("echo '### failed-units'; systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}'\n")
 	b.WriteString("echo '### failed-tasks'; grep -v -e ' OK$' -e ' WARNINGS: ' /var/log/pve/tasks/index 2>/dev/null\n")
@@ -80,7 +87,7 @@ func diagnoseScript(since time.Duration, ceph bool) string {
 	for _, u := range diagnoseUnits {
 		fmt.Fprintf(&b, " -u '%s'", u)
 	}
-	fmt.Fprintf(&b, " 2>/dev/null | tail -n %d\n", maxErrors)
+	fmt.Fprintf(&b, " 2>/dev/null | tail -n %d\n", journalLines)
 	b.WriteString("echo '### clock'; chronyc tracking 2>/dev/null | sed -n 's/^System time *: //p'\n")
 	if ceph {
 		b.WriteString("echo '### ceph'; timeout 10 ceph health detail 2>&1 | head -n 30\n")
@@ -145,7 +152,22 @@ func parseReport(node, output string, since time.Time) nodeReport {
 		r.Quorum = append(r.Quorum, strings.Join(strings.Fields(l), " "))
 	}
 	r.FailedUnits = sections["failed-units"]
-	r.Errors = sections["errors"]
+	var boot time.Time
+	if b := sections["boot"]; len(b) > 0 {
+		if sec, err := strconv.ParseInt(b[0], 10, 64); err == nil {
+			boot = time.Unix(sec, 0)
+		}
+	}
+	for _, l := range sections["errors"] {
+		// short-iso lines start with the time, e.g. 2026-10-22T10:48:22+00:00
+		ts, _, _ := strings.Cut(l, " ")
+		if t, err := time.Parse(time.RFC3339, ts); err == nil && !boot.IsZero() && t.Before(boot.Add(startupGrace)) {
+			r.Startup++
+			continue
+		}
+		r.Errors = append(r.Errors, l)
+	}
+	r.Errors = r.Errors[max(0, len(r.Errors)-maxErrors):]
 	r.Ceph = sections["ceph"]
 	if clock := sections["clock"]; len(clock) > 0 {
 		r.Clock = clock[0]

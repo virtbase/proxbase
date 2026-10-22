@@ -12,7 +12,7 @@ import (
 
 func TestDiagnoseScript(t *testing.T) {
 	s := diagnoseScript(15*time.Minute, false)
-	for _, want := range []string{"--since '-15min'", "-u 'corosync'", "-u 'ceph*'", "tail -n 40", "### clock"} {
+	for _, want := range []string{"--since '-15min'", "-u 'corosync'", "-u 'ceph*'", "tail -n 400", "### boot", "### clock"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("script lacks %q:\n%s", want, s)
 		}
@@ -28,6 +28,8 @@ func TestDiagnoseScript(t *testing.T) {
 func TestParseReport(t *testing.T) {
 	now := time.Unix(0x65000100, 0)
 	output := strings.Join([]string{
+		"### boot",
+		"1792663200", // 2026-10-22T10:00:00Z
 		"### quorum",
 		"Quorate:          Yes",
 		"Total votes:      2",
@@ -39,7 +41,9 @@ func TestParseReport(t *testing.T) {
 		"UPID:pve1:0003:000C:60000000:qmigrate:102:root@pam: 60000010 migration aborted",
 		"not a task line",
 		"### errors",
-		"2026-10-22T10:00:00+0000 pve1 corosync[123]: [KNET] link: host: 2 link: 0 is down",
+		"2026-10-22T10:00:20+00:00 pve1 pmxcfs[99]: [quorum] crit: quorum_initialize failed: CS_ERR_LIBRARY",
+		"2026-10-22T10:01:50+00:00 pve1 pmxcfs[99]: [dcdb] crit: cpg_initialize failed: CS_ERR_LIBRARY",
+		"2026-10-22T10:30:00+00:00 pve1 corosync[123]: [KNET] link: host: 2 link: 0 is down",
 		"",
 		"### clock",
 		"0.000012 seconds fast of NTP time",
@@ -56,8 +60,8 @@ func TestParseReport(t *testing.T) {
 	if len(got.FailedTasks) != 2 || got.FailedTasks[0].Type != "vzdump" || got.FailedTasks[1].Status != "start failed: QEMU exited with code 1" {
 		t.Errorf("failed tasks (newest first, old one left out) = %+v", got.FailedTasks)
 	}
-	if len(got.Errors) != 1 || !strings.Contains(got.Errors[0], "is down") {
-		t.Errorf("errors = %q", got.Errors)
+	if len(got.Errors) != 1 || !strings.Contains(got.Errors[0], "is down") || got.Startup != 2 {
+		t.Errorf("errors = %q, startup errors = %d; want the link error and 2 left out", got.Errors, got.Startup)
 	}
 	if got.Clock != "0.000012 seconds fast of NTP time" || !slices.Equal(got.Ceph, []string{"HEALTH_WARN 1 osds down"}) {
 		t.Errorf("clock = %q, ceph = %q", got.Clock, got.Ceph)
