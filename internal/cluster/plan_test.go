@@ -110,3 +110,11 @@ func TestNewPlan(t *testing.T) {
 		t.Errorf("memory %d, disk %d", p.MemoryMiB, p.DiskMiB)
 	}
 }
+
+func TestRootStorage(t *testing.T) {
+	for fs, want := range map[string]string{"zfs": "local-zfs", "btrfs": "local-btrfs", "ext4": "local-lvm", "xfs": "local-lvm"} {
+		if got := rootStorage(fs); got != want {
+			t.Errorf("rootStorage(%s) = %s, want %s", fs, got, want)
+		}
+	}
+}

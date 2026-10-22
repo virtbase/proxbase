@@ -147,6 +147,41 @@ Pool fields: `name`, `size` (`3`), `minSize` (`2`, or `size` if smaller), `pgNum
 | `bindAddress` | `127.0.0.1` | Host address of the forwards; `0.0.0.0` in the container image |
 | `apiToken` | `true` | Create `proxbase@pve!api` with Administrator on `/` |
 
+### `templates`
+
+Guests to provide as fixtures, e.g. for Terraform clones or `pct create`. Images
+are downloaded once into `~/.cache/proxbase/` and verified; a create without network
+access reuses the last verified download. A create skips what exists, and `node add`
+completes templates on new nodes.
+
+```yaml
+templates:
+  vms:
+    - {name: debian-13, image: debian-13, vmid: 9000, perNode: true, diskSize: 8G}
+    - {name: alma-9, image: "https://repo.almalinux.org/.../AlmaLinux-9-GenericCloud-latest.x86_64.qcow2", checksum: "sha256:…", vmid: 9100}
+  containers: [debian-13-standard]
+```
+
+`vms` are VM templates imported from cloud images: a serial console, cloud-init
+drive, guest agent option, virtio-scsi disk and a NIC on `vmbr0`, ready for
+`qm clone` with `--ciuser`/`--sshkeys`/`--ipconfig0`.
+
+| Field | Default | Notes |
+| --- | --- | --- |
+| `name` | | Template name |
+| `image` | | `debian-13`, `debian-12`, `ubuntu-24.04`, `ubuntu-22.04` (checked against the distribution's SHA512SUMS/SHA256SUMS), or an https URL of a qcow2 or raw image |
+| `checksum` | | `sha256:<hex>` or `sha512:<hex>`; required for URLs |
+| `vmid` | | VMID on the first node; with `perNode`, node N gets `vmid+N-1` |
+| `perNode` | `false` | A copy on every node, for clones on local storage |
+| `storage` | root storage | `local-zfs` on a ZFS root disk, `local-lvm` on ext4/xfs, `local-btrfs` on btrfs |
+| `memory`, `cores` | `1024`, `1` | MiB and cores of the template (clones can change them) |
+| `diskSize` | image size | Grow the disk to this size, e.g. `8G` |
+
+`containers` are container templates by their name in `pveam available --section
+system` (the newest version, amd64), copied to the `local` storage of every node.
+The node downloads the appliance index and checks its signature; the host
+downloads the template and checks its SHA-512 from that index.
+
 ## Flags
 
 | Flag | Field |

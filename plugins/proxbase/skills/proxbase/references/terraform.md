@@ -31,6 +31,14 @@ Notes:
   data storage, `tank` (ZFS, the default) or `ceph-vm` and `cephfs` with Ceph;
   `pve_get /storage` lists them.
 - Small test VMs (1 core, 512 MiB, no disk or OS) are enough to test create, update
-  and destroy. For VMs that must boot, import a cloud image on the node first.
+  and destroy. For VMs that must boot, give the cluster file a template and clone it
+  (`clone { vm_id = 9000 }` with `initialization` for cloud-init); with `perNode`
+  every node has one (`9000 + n - 1`), for clones on local storage:
+
+  ```yaml
+  templates:
+    vms: [{name: debian-13, image: debian-13, vmid: 9000, perNode: true}]
+    containers: [debian-13-standard]   # for proxmox_virtual_environment_container
+  ```
 - For provider development (Go acceptance tests), export the environment from
   `proxbase env` and run `TF_ACC=1 go test ./... -run TestAcc…`.

@@ -22,6 +22,7 @@ The create runs in the background on this host and survives this connection; the
 progress and returns when the cluster is ready, or with running=true after timeoutSeconds
 (then call cluster_wait). Cancelling the call cancels the create (re-run to resume).
 With snapshot="baseline" it saves a live snapshot when ready, which cluster_reset returns to in seconds.
+templates in config provide VM templates from cloud images and container templates as fixtures.
 Needs free memory for all nodes; the first create downloads a ~1.5 GB ISO.`
 
 type createIn struct {

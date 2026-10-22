@@ -83,6 +83,7 @@ func (c *Cluster) SetDefaults() {
 		c.Access.APIToken = ptr(true)
 	}
 	def(&c.Access.BindAddress, "127.0.0.1")
+	c.Templates.setDefaults()
 }
 
 // DataDiskDevice returns the guest device name of data disk i (0-based).

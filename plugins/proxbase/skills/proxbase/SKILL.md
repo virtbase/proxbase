@@ -45,6 +45,9 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
        ceph: {enabled: true}
      ```
 
+   - Fixtures: `templates` in the cluster file provide VM templates from cloud images
+     (`{name: debian-13, image: debian-13, vmid: 9000}`) and container templates
+     (`containers: [debian-13-standard]`), downloaded once and cached on the host.
    - Each new cluster gets its own free port range; `cluster_plan` shows the ports,
      the memory and disk a create needs and what the host has, without creating.
 3. **Connect the code under test** with `cluster_env`: endpoint, API token,

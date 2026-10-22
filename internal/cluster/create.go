@@ -126,6 +126,7 @@ func (c *Cluster) create(ctx context.Context) error {
 		c.setupStorage,
 		c.ensureToken,
 		c.exportCA,
+		c.ensureTemplates,
 		c.endProvisioning,
 	}
 	for _, step := range steps {

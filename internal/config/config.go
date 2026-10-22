@@ -34,6 +34,7 @@ type Cluster struct {
 	Networks   []Network `yaml:"networks" json:"networks,omitempty"`
 	Storage    Storage   `yaml:"storage" json:"storage,omitempty"`
 	Access     Access    `yaml:"access" json:"access,omitempty"`
+	Templates  Templates `yaml:"templates,omitempty" json:"templates,omitempty" jsonschema:"description=VM and container templates to provide on the nodes"`
 }
 
 type Proxmox struct {

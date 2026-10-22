@@ -120,6 +120,10 @@
         },
         "access": {
           "$ref": "#/$defs/Access"
+        },
+        "templates": {
+          "$ref": "#/$defs/Templates",
+          "description": "VM and container templates to provide on the nodes"
         }
       },
       "additionalProperties": false,
@@ -298,6 +302,70 @@
         },
         "ceph": {
           "$ref": "#/$defs/Ceph"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Templates": {
+      "properties": {
+        "vms": {
+          "items": {
+            "$ref": "#/$defs/VMTemplate"
+          },
+          "type": "array"
+        },
+        "containers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Container templates as named by pveam, e.g. debian-13-standard or ubuntu-24.04-standard (newest version); copied to every node"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "VMTemplate": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the template in Proxmox VE"
+        },
+        "image": {
+          "type": "string",
+          "description": "A known image (debian-13, debian-12, ubuntu-24.04, ubuntu-22.04) or an https URL of a qcow2 or raw image"
+        },
+        "checksum": {
+          "type": "string",
+          "pattern": "^(sha256|sha512):[0-9a-f]+$",
+          "description": "sha256:\u003chex\u003e or sha512:\u003chex\u003e of an image given by URL (required for URLs)"
+        },
+        "vmid": {
+          "type": "integer",
+          "maximum": 999999999,
+          "minimum": 100
+        },
+        "storage": {
+          "type": "string",
+          "description": "Storage for the disk (default: the root disk's storage, local-zfs on ZFS)"
+        },
+        "memory": {
+          "type": "integer",
+          "description": "MiB (default 1024)"
+        },
+        "cores": {
+          "type": "integer",
+          "description": "default 1"
+        },
+        "diskSize": {
+          "type": "string",
+          "pattern": "^[0-9]+[MGT]$",
+          "description": "Grow the disk to this size (default: the image's size)"
+        },
+        "perNode": {
+          "type": "boolean",
+          "description": "A copy on every node (VMID vmid+n-1 on node n), for clones on local storage; default: on the first node only"
         }
       },
       "additionalProperties": false,

@@ -66,6 +66,7 @@ flowchart TD
 | `remote` | SSH to nodes through the forwarded ports |
 | `retry` | Retry with timeout, interval and permanent errors |
 | `golden` | Cached base images: build, bake, and the personalization of clones from older images |
+| `guestimage` | Download, verify and cache the cloud images and container templates of `templates` |
 | `cluster` | Orchestration: create, lifecycle, nodes, snapshots, faults, status, exec |
 | `progress` | Progress events and sinks: text, JSON lines, MCP notifications |
 | `job` | Runs a create or node change detached from its caller, with a JSON-lines progress log |
@@ -106,6 +107,7 @@ sequenceDiagram
     CLI->>Node: wait for quorum and a writable /etc/pve, repair lost node certificates
     CLI->>API: storage backends: ZFS pools / Ceph
     CLI->>API: API token, export CA
+    CLI->>Node: templates: upload cached images, qm create + qm template, container templates
     CLI->>Node: end provisioning mode
 ```
 
@@ -211,6 +213,8 @@ server process, guarded by the same cluster lock as the CLI.
 ~/.cache/proxbase/iso/     ISOs, SHA256SUMS, extracted installer files
 ~/.cache/proxbase/images/  golden base images (create --golden)
 ~/.cache/proxbase/apt/     packages served to the nodes (unused for 30 days: removed)
+~/.cache/proxbase/cloud/   cloud images for VM templates, by checksum
+~/.cache/proxbase/containers/  container templates and their index entries
 ```
 
 Design decisions and measurements are in [research/feasibility.md](research/feasibility.md).

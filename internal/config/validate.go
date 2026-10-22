@@ -222,6 +222,7 @@ func (c *Cluster) Validate() error {
 	if c.CephEnabled() {
 		errs = append(errs, c.validateCeph(used)...)
 	}
+	errs = append(errs, c.validateTemplates()...)
 
 	if b := c.Access.PortBase; b != 0 && (b < 1024 || b+100+c.MaxNodeIndex() > 65535) {
 		add("access.portBase: must be between 1024 and %d", 65535-100-c.MaxNodeIndex())

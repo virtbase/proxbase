@@ -1,0 +1,22 @@
+# Two nodes with test fixtures: a Debian 13 VM template on each node (for clones
+# on local storage), an Ubuntu 24.04 template, and the Debian container template.
+# Images are downloaded once into ~/.cache/proxbase and verified by checksum.
+#   proxbase create -f examples/templates.yaml --golden
+#   proxbase ssh templates pve1 -- qm clone 9000 200 --name test
+apiVersion: proxbase.virtbase.com/v1alpha1
+kind: Cluster
+name: templates
+nodes:
+  count: 2
+templates:
+  vms:
+    - name: debian-13
+      image: debian-13
+      vmid: 9000
+      perNode: true
+      diskSize: 8G
+    - name: ubuntu-2404
+      image: ubuntu-24.04
+      vmid: 9100
+  containers:
+    - debian-13-standard

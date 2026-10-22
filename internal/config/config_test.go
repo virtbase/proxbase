@@ -326,3 +326,29 @@ func TestPortBaseValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateTemplates(t *testing.T) {
+	sum := "sha256:" + strings.Repeat("a", 64)
+	tests := []struct {
+		name string
+		file string
+		want string // "" for valid
+	}{
+		{"known image", "templates:\n  vms: [{name: debian, image: debian-13, vmid: 9000}]\n  containers: [debian-13-standard]\n", ""},
+		{"url with checksum", "templates:\n  vms: [{name: alma, image: \"https://example.org/a.qcow2\", checksum: " + sum + ", vmid: 9000}]\n", ""},
+		{"url without checksum", "templates:\n  vms: [{name: alma, image: \"https://example.org/a.qcow2\", vmid: 9000}]\n", "needs a checksum"},
+		{"http url", "templates:\n  vms: [{name: alma, image: \"http://example.org/a.qcow2\", checksum: " + sum + ", vmid: 9000}]\n", "https URL"},
+		{"short digest", "templates:\n  vms: [{name: alma, image: debian-13, checksum: \"sha256:abc\", vmid: 9000}]\n", "hex digits"},
+		{"per-node vmids overlap", "nodes: {count: 3}\ntemplates:\n  vms: [{name: a, image: debian-13, vmid: 9000, perNode: true}, {name: b, image: debian-12, vmid: 9002}]\n", "also used by template a"},
+		{"vmid too small", "templates:\n  vms: [{name: a, image: debian-13, vmid: 99}]\n", "vmid must be"},
+		{"bad container", "templates:\n  containers: [\"Debian 13\"]\n", "template name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := load(t, tt.file).Validate()
+			if tt.want == "" && err != nil || tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)) {
+				t.Errorf("Validate = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
