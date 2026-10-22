@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.2](https://github.com/virtbase/proxbase/compare/v0.2.1...v0.2.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **action:** wait for udev before checking /dev/kvm ([#14](https://github.com/virtbase/proxbase/issues/14)) ([b899826](https://github.com/virtbase/proxbase/commit/b8998264cddbdf00df1acbc0c6d2cac938225781))
+
+
+### Dependencies
+
+* **deps:** update container images ([#16](https://github.com/virtbase/proxbase/issues/16)) ([737f410](https://github.com/virtbase/proxbase/commit/737f41043ee5b8d75c4606af4e18e8306340b551))
+* update go modules ([#12](https://github.com/virtbase/proxbase/issues/12)) ([f659167](https://github.com/virtbase/proxbase/commit/f659167236a3e644e68c4cdb3c62d31337143a4c))
+
 ## [0.2.1](https://github.com/virtbase/proxbase/compare/v0.2.0...v0.2.1) (2026-10-11)
 
 
