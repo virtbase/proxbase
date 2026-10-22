@@ -18,6 +18,27 @@ tar -xzf proxbase_<version>_linux_amd64.tar.gz && sudo install proxbase /usr/loc
 
 Homebrew (macOS and Linux): `brew install --cask virtbase/tap/proxbase`
 
+## Man pages and completions
+
+Packages and the Homebrew cask install a man page per command (`man proxbase`,
+`man proxbase-create`, `man proxbase-node-add`) and completions for bash, zsh and fish.
+The archives contain them in `man/` and `completions/`:
+
+```bash
+sudo install -Dm644 -t /usr/local/share/man/man1 man/*.1.gz
+install -Dm644 completions/proxbase.bash ~/.local/share/bash-completion/completions/proxbase
+install -Dm644 completions/proxbase.fish ~/.config/fish/completions/proxbase.fish
+```
+
+For zsh, copy `completions/_proxbase` to a directory in `$fpath`. `proxbase completion
+--help` prints the scripts for other setups.
+
+Opening the `.deb` in GNOME Software or KDE Discover shows its description before
+installing. The packages also ship AppStream metadata and an icon
+(`io.github.virtbase.proxbase`), but neither lists command-line tools that come from a
+downloaded package: GNOME Software hides console applications, and Discover shows only
+components from a repository's catalog.
+
 From source: `go install github.com/virtbase/proxbase/cmd/proxbase@latest`
 
 ## Container image

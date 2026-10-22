@@ -26,11 +26,18 @@ Releases are automatic; nobody tags by hand.
 To re-run the publishing for an existing release, run the `Release` workflow manually
 with its tag.
 
+Before the builds, GoReleaser runs `cmd/gendist`, which writes a man page per command,
+bash, zsh and fish completions, the AppStream metainfo (with the release's version and
+date) and the Debian changelog to `build/`; archives, packages and the cask take them
+from there. The `packages` job in CI builds the whole configuration without publishing
+on every pull request, validates the metainfo, runs lintian on the `.deb` and installs
+it.
+
 Local dry run (no signing, no publishing):
 
 ```bash
 goreleaser check
-goreleaser release --snapshot --clean --skip=sign
+goreleaser release --snapshot --clean --skip=docker,sign,sbom,publish
 ```
 
 The image is built for linux/amd64 only; arm64 binaries and packages are released.

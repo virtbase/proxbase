@@ -61,3 +61,33 @@ jobs:
           persist-credentials: false
       - run: docker build -t proxbase:ci .
       - run: docker run --rm proxbase:ci version
+
+  # The release configuration, built without publishing: archives, packages, the cask,
+  # and the man pages, completions and metainfo they ship.
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=docker,sign,sbom,publish
+        env:
+          HOMEBREW_TAP_TOKEN: unused
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends appstream lintian man-db
+      - run: appstreamcli validate --pedantic --explain build/metainfo/*.metainfo.xml
+      - run: lintian --fail-on error,warning --tag-display-limit 0 dist/*_linux_amd64.deb
+      - name: Install the .deb
+        run: |
+          sudo apt-get install -y -qq ./dist/*_linux_amd64.deb
+          proxbase version
+          man -w proxbase proxbase-create
+          test -f /usr/share/bash-completion/completions/proxbase
+          sudo appstreamcli refresh-cache --force
+          appstreamcli get io.github.virtbase.proxbase

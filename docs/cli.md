@@ -91,7 +91,7 @@ See [fault-injection.md](fault-injection.md).
 | `config schema` | Print the JSON schema |
 | `upgrade` | Upgrade proxbase itself to the latest release (`--version`, `--check`, `--yes`, `--allow-downgrade`, `--signature auto\|require\|skip`); see [upgrading](install.md#upgrading) |
 | `version` | Print the version |
-| `completion <shell>` | Shell completion script |
+| `completion <shell>` | Shell completion script (the packages and Homebrew install them; see [installing](install.md#man-pages-and-completions)) |
 
 `upgrade --check` exits with 0 when proxbase is up to date and 100 when a newer
 release exists, 1 on errors; `upgrade` without a terminal needs `--yes`. Installs that

@@ -2,6 +2,11 @@
 version: 2
 project_name: proxbase
 
+# Man pages, shell completions and the AppStream metainfo for archives and packages.
+before:
+  hooks:
+    - go run ./cmd/gendist -version {{ .Version }} -date {{ .CommitDate }} build
+
 builds:
   - id: proxbase
     main: ./cmd/proxbase
@@ -15,7 +20,15 @@ builds:
 archives:
   - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, README.md]
+    files:
+      - LICENSE
+      - README.md
+      - src: build/man/*.1.gz
+        dst: man
+        strip_parent: true
+      - src: build/completions/*
+        dst: completions
+        strip_parent: true
 
 checksum:
   name_template: checksums.txt
@@ -39,10 +52,57 @@ nfpms:
     vendor: virtbase
     homepage: https://github.com/virtbase/proxbase
     maintainer: "Janic Bellmann <contact@janic.dev>"
-    description: Proxmox VE clusters in QEMU/KVM for labs and CI
+    # The first line is the summary; package managers show the rest as the long description.
+    description: |-
+      Proxmox VE clusters in QEMU/KVM for labs and CI
+      Proxbase creates real Proxmox VE clusters on a Linux machine in a few minutes.
+      It starts every node as a QEMU/KVM virtual machine, installs it from the
+      official Proxmox VE ISO with the automated installer and joins the nodes into
+      a cluster, with ZFS or Ceph storage, internal networks and an API token ready
+      for Terraform or Ansible. It needs no root: only KVM access and qemu-img.
+      Clusters can be snapshotted, reset and broken with fault injection, and driven
+      from CI or by AI agents through an MCP server.
     license: Apache-2.0
+    section: admin
+    priority: optional
     formats: [deb, rpm, apk]
     bindir: /usr/bin
+    contents:
+      - src: build/man/*.1.gz
+        dst: /usr/share/man/man1/
+      - src: build/completions/proxbase.bash
+        dst: /usr/share/bash-completion/completions/proxbase
+      - src: build/completions/_proxbase
+        dst: /usr/share/zsh/vendor-completions/_proxbase
+        packager: deb
+      - src: build/completions/_proxbase
+        dst: /usr/share/zsh/site-functions/_proxbase
+        packager: rpm
+      - src: build/completions/_proxbase
+        dst: /usr/share/zsh/site-functions/_proxbase
+        packager: apk
+      - src: build/completions/proxbase.fish
+        dst: /usr/share/fish/vendor_completions.d/proxbase.fish
+      # Software centres (GNOME Software, Discover) show installed packages from these.
+      - src: build/metainfo/io.github.virtbase.proxbase.metainfo.xml
+        dst: /usr/share/metainfo/io.github.virtbase.proxbase.metainfo.xml
+      - src: internal/mcpserver/icon.svg
+        dst: /usr/share/icons/hicolor/scalable/apps/io.github.virtbase.proxbase.svg
+        file_info: {mode: 0644}
+      - src: packaging/deb/copyright
+        dst: /usr/share/doc/proxbase/copyright
+        packager: deb
+        file_info: {mode: 0644}
+      - src: LICENSE
+        dst: /usr/share/licenses/proxbase/LICENSE
+        packager: rpm
+        file_info: {mode: 0644}
+      - src: README.md
+        dst: /usr/share/doc/proxbase/README.md
+        file_info: {mode: 0644}
+      - src: build/deb/changelog.Debian.gz
+        dst: /usr/share/doc/proxbase/changelog.Debian.gz
+        packager: deb
     dependencies: [qemu-utils]
     recommends: [qemu-system-x86]
     overrides:
@@ -52,6 +112,9 @@ nfpms:
       apk:
         dependencies: [qemu-img]
         recommends: [qemu-system-x86_64]
+    deb:
+      lintian_overrides:
+        - statically-linked-binary # Go, built with CGO_ENABLED=0
 
 homebrew_casks:
   - name: proxbase
@@ -62,6 +125,62 @@ homebrew_casks:
     homepage: https://github.com/virtbase/proxbase
     description: Proxmox VE clusters in QEMU/KVM for labs and CI
     caveats: macOS support is experimental; clusters need a Linux host with KVM.
+    completions:
+      bash: completions/proxbase.bash
+      zsh: completions/_proxbase
+      fish: completions/proxbase.fish
+    # Every page in build/man; TestCaskManpages fails when the list is out of date.
+    manpages:
+      - man/proxbase-completion-bash.1.gz
+      - man/proxbase-completion-fish.1.gz
+      - man/proxbase-completion-powershell.1.gz
+      - man/proxbase-completion-zsh.1.gz
+      - man/proxbase-completion.1.gz
+      - man/proxbase-config-init.1.gz
+      - man/proxbase-config-schema.1.gz
+      - man/proxbase-config-validate.1.gz
+      - man/proxbase-config.1.gz
+      - man/proxbase-console.1.gz
+      - man/proxbase-cp.1.gz
+      - man/proxbase-create.1.gz
+      - man/proxbase-destroy.1.gz
+      - man/proxbase-doctor.1.gz
+      - man/proxbase-env.1.gz
+      - man/proxbase-fault-clear.1.gz
+      - man/proxbase-fault-degrade.1.gz
+      - man/proxbase-fault-freeze.1.gz
+      - man/proxbase-fault-kill.1.gz
+      - man/proxbase-fault-link.1.gz
+      - man/proxbase-fault-partition.1.gz
+      - man/proxbase-fault-thaw.1.gz
+      - man/proxbase-fault.1.gz
+      - man/proxbase-gc.1.gz
+      - man/proxbase-image-list.1.gz
+      - man/proxbase-image-prune.1.gz
+      - man/proxbase-image.1.gz
+      - man/proxbase-list.1.gz
+      - man/proxbase-mcp.1.gz
+      - man/proxbase-node-add.1.gz
+      - man/proxbase-node-remove.1.gz
+      - man/proxbase-node.1.gz
+      - man/proxbase-snapshot-delete.1.gz
+      - man/proxbase-snapshot-list.1.gz
+      - man/proxbase-snapshot-restore.1.gz
+      - man/proxbase-snapshot-save.1.gz
+      - man/proxbase-snapshot.1.gz
+      - man/proxbase-ssh.1.gz
+      - man/proxbase-start.1.gz
+      - man/proxbase-status.1.gz
+      - man/proxbase-stop.1.gz
+      - man/proxbase-token-create.1.gz
+      - man/proxbase-token-delete.1.gz
+      - man/proxbase-token-list.1.gz
+      - man/proxbase-token.1.gz
+      - man/proxbase-ttl.1.gz
+      - man/proxbase-up.1.gz
+      - man/proxbase-upgrade.1.gz
+      - man/proxbase-version.1.gz
+      - man/proxbase.1.gz
     skip_upload: auto
 
 dockers_v2:

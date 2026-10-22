@@ -11,6 +11,7 @@ make build                       # bin/proxbase
 go test -race ./...              # unit tests, no KVM needed
 golangci-lint run ./...          # v2.15.0, as CI (.golangci.yml)
 make schema                      # after changing internal/config (a test fails otherwise)
+make packaging                   # man pages, completions, metainfo in build/ (as GoReleaser)
 ```
 
 End-to-end, on a Linux host with `/dev/kvm` (about a minute once the ISO and base
@@ -38,6 +39,8 @@ The e2e test creates and destroys its own cluster (`mcp-e2e`, or
   `jsonschema` descriptions, read-only or destructive annotations, and a place in
   a toolset (`toolsets.go`; a test enforces it). Long operations must return
   within the call limit (`h.limit(req)`).
+- A new or renamed command needs its man page in the Homebrew cask list in
+  `.goreleaser.yaml` (`TestCaskManpages` in `cmd/gendist` prints the list).
 - User-facing changes update the docs in the same change: `docs/cli.md`,
   `docs/mcp.md`, `docs/configuration.md`, `docs/architecture.md`, the topic page,
   and the agent skill in `plugins/proxbase/skills/proxbase/`.

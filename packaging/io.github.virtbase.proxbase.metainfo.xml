@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo for software centres. cmd/gendist adds the release entry at release time. -->
+<component type="console-application">
+  <id>io.github.virtbase.proxbase</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Proxbase</name>
+  <summary>Proxmox VE clusters in QEMU/KVM for labs and CI</summary>
+  <developer id="io.github.virtbase">
+    <name>virtbase</name>
+  </developer>
+  <description>
+    <p>
+      Proxbase creates real Proxmox VE clusters on a Linux machine in a few minutes. It starts
+      every node as a QEMU/KVM virtual machine, installs it from the official Proxmox VE ISO
+      with the automated installer and joins the nodes into a cluster, with ZFS or Ceph
+      storage, internal networks and an API token ready for Terraform or Ansible.
+    </p>
+    <ul>
+      <li>No root and no Docker: only KVM access and qemu-img</li>
+      <li>ZFS pools or hyperconverged Ceph, several internal networks with VLANs</li>
+      <li>Start, stop, add and remove nodes, snapshots and resets of the whole cluster</li>
+      <li>Fault injection: power loss, hung nodes, pulled cables, partitions, latency</li>
+      <li>JSON output, a GitHub Action and an MCP server for CI and AI agents</li>
+    </ul>
+  </description>
+  <icon type="stock">io.github.virtbase.proxbase</icon>
+  <categories>
+    <category>Development</category>
+    <category>System</category>
+  </categories>
+  <keywords>
+    <keyword>Proxmox</keyword>
+    <keyword>PVE</keyword>
+    <keyword>QEMU</keyword>
+    <keyword>KVM</keyword>
+    <keyword>Ceph</keyword>
+    <keyword>cluster</keyword>
+    <keyword>homelab</keyword>
+    <keyword>CI</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/virtbase/proxbase</url>
+  <url type="bugtracker">https://github.com/virtbase/proxbase/issues</url>
+  <url type="help">https://github.com/virtbase/proxbase/tree/main/docs</url>
+  <url type="vcs-browser">https://github.com/virtbase/proxbase</url>
+  <url type="contribute">https://github.com/virtbase/proxbase/blob/main/CONTRIBUTING.md</url>
+  <provides>
+    <binary>proxbase</binary>
+  </provides>
+  <requires>
+    <kernel>Linux</kernel>
+  </requires>
+  <content_rating type="oars-1.1"/>
+</component>

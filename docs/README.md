@@ -20,4 +20,4 @@
 | [Bridge mode](bridge-mode.md) | Design for host-reachable networks (not implemented) |
 | [Releasing](releasing.md) · [GitHub setup](github-setup.md) | For maintainers |
 | [Feasibility research](research/feasibility.md) | Measurements behind the design decisions |
-| [Agent workflows](research/agent-workflows.md) · [Product variations](research/product-variations.md) · [Versions and upgrades](research/version-upgrades.md) | Research and roadmap |
+| [Agent workflows](research/agent-workflows.md) · [Product variations](research/product-variations.md) · [Versions and upgrades](research/version-upgrades.md) · [Packaging and a GUI](research/packaging-and-gui.md) | Research and roadmap |

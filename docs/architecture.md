@@ -81,6 +81,10 @@ storage backend implements `storage.Backend` (plus optional `Waiter`,
 `StopPreparer`, `NodeRemover`, `HealthReporter`), and a different network backend
 (for example host bridges) would replace `network.Switch`.
 
+Outside the binary, `cmd/gendist` generates what releases ship next to it: man pages
+and shell completions from the command tree (`cli.Command`), the AppStream metainfo
+from `packaging/` and the Debian changelog ([releasing](releasing.md)).
+
 ## Create
 
 ```mermaid
