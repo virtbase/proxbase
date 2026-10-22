@@ -77,7 +77,7 @@ See [fault-injection.md](fault-injection.md).
 | `console [cluster] <node>` | Serial console, Ctrl-] to detach |
 | `env [cluster]` | API endpoint and credentials: `--format shell\|json\|terraform`, `--export <dir>`, `--token <name>` for a scoped token |
 | `token create\|list\|delete [cluster] <name>` | Scoped API tokens: one role on one path (`--role PVEAuditor`, `--path /vms/100`, `--no-propagate`); `create` prints `tokenId=secret` |
-| `mcp` | MCP server on stdio for AI agents (`--call-timeout`, see [mcp.md](mcp.md#call-timeouts)) |
+| `mcp` | MCP server on stdio for AI agents: `--call-timeout` ([call timeouts](mcp.md#call-timeouts)), `--read-only`, `--toolsets`, `--audit-log` ([security](mcp.md#security)) |
 
 ## Host and files
 

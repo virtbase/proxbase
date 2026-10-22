@@ -76,7 +76,11 @@ func connectAs(t *testing.T, client string, opts Options) (*mcp.ClientSession, *
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	ctx := context.Background()
 	st, ct := mcp.NewInMemoryTransports()
-	if _, err := New("test", nil, opts).Connect(ctx, st, nil); err != nil {
+	srv, err := New("test", nil, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 	p := &progressLog{}

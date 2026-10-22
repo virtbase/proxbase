@@ -200,6 +200,19 @@ privileges on the lab cluster) and, on request, the root password; treat the
 conversation accordingly. To give code under test less, hand it a scoped token from
 `token_create`. Progress and errors are logged to stderr.
 
+Limit what an agent may do with flags of `proxbase mcp`:
+
+| Flag | Effect |
+| --- | --- |
+| `--read-only` | Only tools that change nothing: status, plans, diagnosis, logs, API reads, `file_get`. The server instructions tell the agent so |
+| `--toolsets cluster,api` | Only these groups: `cluster` (lifecycle, status, env, reset, lifetime), `node` (exec, files, add/remove), `api` (`pve_*`, tasks, tokens), `snapshot`, `fault`, `host` (images, `host_check`, `config_validate`) |
+| `--audit-log FILE` | Appends one JSON line (time, client, tool, arguments with long values cut, error, seconds) per call of a tool that changes something; mode 0600 |
+
+```bash
+claude mcp add proxbase-ro -- proxbase mcp --read-only
+claude mcp add proxbase -- proxbase mcp --toolsets cluster,api,snapshot --audit-log ~/.local/state/proxbase-mcp.jsonl
+```
+
 ## MCP registry
 
 [`server.json`](../server.json) describes the server for the

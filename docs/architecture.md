@@ -70,7 +70,7 @@ flowchart TD
 | `progress` | Progress events and sinks: text, JSON lines, MCP notifications |
 | `job` | Runs a create or node change detached from its caller, with a JSON-lines progress log |
 | `doctor` | Host checks of `proxbase doctor` and the `host_check` tool |
-| `mcpserver` | MCP server (`proxbase mcp`): tools, the schema resource, progress forwarding |
+| `mcpserver` | MCP server (`proxbase mcp`): tools in toolsets, the schema resource, progress forwarding, call limits, read-only mode and the audit log |
 | `selfupdate` | `proxbase upgrade`: find a GitHub release, verify it (SHA-256, cosign), detect package-manager installs, replace the binary atomically |
 | `cli` | Commands, flags and output |
 

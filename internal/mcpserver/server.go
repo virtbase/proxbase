@@ -50,7 +50,20 @@ type Options struct {
 	// what is still pending. Zero picks it per client: no limit for clients that
 	// wait for long calls, shortCallLimit for all others.
 	CallTimeout time.Duration
+	// ReadOnly offers only the tools that change nothing.
+	ReadOnly bool
+	// Toolsets offers only the tools of these sets (see ToolsetNames); empty: all.
+	Toolsets []string
+	// AuditLog, if set, is a file that gets one JSON line per call of a tool that
+	// changes something.
+	AuditLog string
 }
+
+// readOnlyNote tells the agent that it cannot change anything.
+const readOnlyNote = `
+
+This server is read-only: it offers only the tools that inspect clusters. Ask the user to run
+proxbase mcp without --read-only to create, change or delete anything.`
 
 // shortCallLimit keeps tool calls below the 60-second timeout of clients such as
 // Codex, with room for the result to arrive.
@@ -81,14 +94,24 @@ func within(limit, d time.Duration) time.Duration {
 
 // New returns the server. log receives the progress of all operations as well
 // (e.g. for the client's server log on stderr).
-func New(version string, log progress.Sink, opts Options) *mcp.Server {
+func New(version string, log progress.Sink, opts Options) (*mcp.Server, error) {
 	if log == nil {
 		log = progress.Discard
 	}
+	if err := checkToolsets(opts.Toolsets); err != nil {
+		return nil, err
+	}
+	text := instructions
+	if opts.ReadOnly {
+		text += readOnlyNote
+	}
 	s := mcp.NewServer(&mcp.Implementation{Name: "proxbase", Title: "Proxbase", Version: version},
-		&mcp.ServerOptions{Instructions: instructions})
-	h := &handlers{log: log, callTimeout: opts.CallTimeout}
+		&mcp.ServerOptions{Instructions: text})
+	h := &handlers{log: log, opts: opts, readOnly: map[string]bool{}}
 	h.register(s)
+	if opts.AuditLog != "" {
+		s.AddReceivingMiddleware(auditMiddleware(opts.AuditLog, h.readOnly, log))
+	}
 	s.AddResource(&mcp.Resource{
 		URI:         SchemaURI,
 		Name:        "cluster-schema",
@@ -102,17 +125,22 @@ func New(version string, log progress.Sink, opts Options) *mcp.Server {
 		}
 		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: SchemaURI, MIMEType: "application/schema+json", Text: string(b)}}}, nil
 	})
-	return s
+	return s, nil
 }
 
 // Run serves one client on stdin/stdout until it disconnects.
 func Run(ctx context.Context, version string, log progress.Sink, opts Options) error {
-	return New(version, log, opts).Run(ctx, &mcp.StdioTransport{})
+	s, err := New(version, log, opts)
+	if err != nil {
+		return err
+	}
+	return s.Run(ctx, &mcp.StdioTransport{})
 }
 
 type handlers struct {
-	log         progress.Sink
-	callTimeout time.Duration // Options.CallTimeout
+	log      progress.Sink
+	opts     Options
+	readOnly map[string]bool // tool names: whether the tool changes nothing
 }
 
 // clientName is the name the MCP client gave, if any.
@@ -125,7 +153,7 @@ func clientName(req *mcp.CallToolRequest) string {
 
 // limit is how long the call req may block; 0 means no limit.
 func (h *handlers) limit(req *mcp.CallToolRequest) time.Duration {
-	return callLimit(h.callTimeout, req.ClientInfo())
+	return callLimit(h.opts.CallTimeout, req.ClientInfo())
 }
 
 // sink forwards progress to the client (if it asked for it) and the server log.

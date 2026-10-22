@@ -73,6 +73,8 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 
 - Do not destroy, reset or break clusters you did not create without asking: they
   may hold someone's work.
+- If a tool you need is missing, the user may run the server with `--read-only` or
+  `--toolsets`; say which tool you need instead of working around it.
 - Tool calls return before the client's timeout (50 s for clients other than Claude
   Code). `running: true` means call `cluster_wait`; `cluster_start` with
   `healthy: false` and "still starting" means poll `cluster_status`. In `node_exec`,
