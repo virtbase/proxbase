@@ -77,10 +77,17 @@ runs:
     - name: Enable KVM
       shell: bash
       run: |
+        if [ ! -e /dev/kvm ]; then
+          echo "::error::/dev/kvm does not exist: this runner's host does not expose nested virtualization ($(nproc) CPUs, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs), vmx/svm: $(grep -cwE 'vmx|svm' /proc/cpuinfo)). Re-run the job, or use a larger or self-hosted runner."
+          exit 1
+        fi
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
-        test -w /dev/kvm || { echo "::error::/dev/kvm is not available on this runner"; exit 1; }
+        # trigger only queues the event; wait for udevd to apply the rule
+        sudo udevadm settle --timeout=30 || true
+        test -w /dev/kvm || sudo chmod 0666 /dev/kvm
+        test -w /dev/kvm || { ls -l /dev/kvm; echo "::error::/dev/kvm is not writable"; exit 1; }
 
     - name: Install QEMU
       shell: bash
