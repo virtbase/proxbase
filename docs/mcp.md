@@ -79,6 +79,8 @@ Clusters created in the container live in the `proxbase` volume; use
 | `cluster_start`, `cluster_stop` | Boot or shut down all nodes |
 | `cluster_destroy` | Delete a cluster; `confirm` must repeat the cluster name |
 | `node_exec` | Run a command as root on a node; returns `stdout`, `stderr`, `exitCode` |
+| `file_put`, `file_get` | Write a file on a node (text or base64, up to 4 MiB, replaced atomically) or read one (`maxBytes`, default 256 KiB) |
+| `node_add`, `node_remove` | Grow or shrink a cluster as a [background job](#background-jobs); `node_remove` needs `confirm` set to the node name |
 | `pve_get` | Read from the Proxmox VE API with the cluster's token: `path` (e.g. `/cluster/resources`), `params`; returns the response data |
 | `pve_call` | POST, PUT or DELETE through the API; waits for the task it starts and returns its exit status and log, a failed task is an error |
 | `task_list` | Proxmox VE tasks of every node or one, newest first; filters `errorsOnly`, `running`, `type`, `vmid`, `sinceMinutes` |
@@ -89,6 +91,8 @@ Clusters created in the container live in the `proxbase` volume; use
 | `cluster_reset` | Back to a snapshot (default `baseline`) in one call: power off, restore, start or resume; returns the status |
 | `fault_apply`, `fault_clear` | kill, freeze, thaw, link-down/up, partition, degrade |
 | `config_validate` | Check a cluster file; returns errors, warnings and the file with defaults |
+| `image_list`, `image_prune` | Cached base images and the clusters using them; delete unused ones (`dryRun`) |
+| `host_check` | The checks of `proxbase doctor`: KVM, nested virtualization, QEMU, memory, disk, ports |
 
 The resource `https://proxbase.virtbase.com/schema/v1alpha1/cluster.json` is the JSON
 schema of cluster files. Tool annotations mark read-only and destructive tools, so
@@ -108,7 +112,7 @@ in [`plugins/proxbase/skills/proxbase`](../plugins/proxbase/skills/proxbase/SKIL
 | Claude Code | `/plugin install proxbase --marketplace virtbase/proxbase`: plugin with the skill and the MCP server, or `/plugin marketplace add virtbase/proxbase` and `/plugin install proxbase@virtbase` |
 | Codex, Cursor, others | `npx skills add virtbase/proxbase`: copies the skill to `.agents/skills/proxbase` in the project (`-g` for your user); add the MCP server as above |
 
-## Long-running creates
+## Background jobs
 
 A create takes under a minute with a cached [golden image](golden-images.md) (the
 default for `cluster_create`; Ceph about 1.5 minutes) and 10-20 minutes the first time, when it downloads the
@@ -116,17 +120,21 @@ ISO and builds the base image. Many clients time out tool calls earlier, so:
 
 - `cluster_create` starts the create as a background job on the host
   (`proxbase create --progress json`), follows it, and sends each step as an MCP
-  progress notification if the client passed a progress token.
+  progress notification if the client passed a progress token. `node_add` and
+  `node_remove` run `proxbase node add` and `node remove` the same way; a cluster
+  has at most one job at a time.
 - It returns when the cluster is ready or failed, or after `timeoutSeconds`
   (default 600, capped by the [call timeout](#call-timeouts)) with `running: true`;
   then `cluster_wait` continues.
 - The job survives the MCP server: a restarted client can call `cluster_wait` or
-  `cluster_status` (which shows the latest steps while it runs).
-- Cancelling `cluster_create` stops the create (SIGTERM); calling it again resumes.
-  Cancelling `cluster_wait` only stops waiting.
+  `cluster_status` (its `job` field shows the command and latest steps while it runs).
+- Cancelling the call stops the job (SIGTERM); `cluster_create` with the cluster's
+  name resumes a create or an interrupted node add. Cancelling `cluster_wait` only
+  stops waiting.
 
 The job log is `~/.local/share/proxbase/jobs/<cluster>.jsonl` (same events as
-`--progress json`); node install logs stay in the cluster's `logs/` directory.
+`--progress json`) and its command line `<cluster>.cmd`; node install logs stay in
+the cluster's `logs/` directory.
 
 ## Call timeouts
 

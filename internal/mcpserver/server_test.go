@@ -167,7 +167,7 @@ func TestTools(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	for _, want := range []string{"cluster_list", "cluster_status", "cluster_create", "cluster_wait", "cluster_start", "cluster_stop",
-		"cluster_destroy", "cluster_reset", "node_exec", "cluster_diagnose", "pve_get", "pve_call", "task_list", "task_log", "task_wait", "cluster_env", "snapshot_save", "snapshot_restore", "snapshot_list", "fault_apply", "fault_clear", "config_validate"} {
+		"cluster_destroy", "cluster_reset", "node_exec", "node_add", "node_remove", "file_put", "file_get", "image_list", "image_prune", "host_check", "cluster_diagnose", "pve_get", "pve_call", "task_list", "task_log", "task_wait", "cluster_env", "snapshot_save", "snapshot_restore", "snapshot_list", "fault_apply", "fault_clear", "config_validate"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("tool %s missing (have %v)", want, names)
 		}
@@ -270,7 +270,7 @@ func TestCreateReportsJobProgress(t *testing.T) {
 		t.Errorf("wait for an ended job: %s", text(res))
 	}
 	res, _ = call(t, cs, "cluster_wait", map[string]any{"cluster": "other"})
-	if !res.IsError || !strings.Contains(text(res), "no create") {
+	if !res.IsError || !strings.Contains(text(res), "no job") {
 		t.Errorf("wait without job: %s", text(res))
 	}
 }

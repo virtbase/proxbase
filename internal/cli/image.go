@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/virtbase/proxbase/internal/golden"
-	"github.com/virtbase/proxbase/internal/state"
 )
 
 func imageCmd() *cobra.Command {
@@ -23,7 +22,7 @@ func imageCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			users, err := baseUsers()
+			users, err := golden.Users()
 			if err != nil {
 				return err
 			}
@@ -48,7 +47,7 @@ func imageCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			users, err := baseUsers()
+			users, err := golden.Users()
 			if err != nil {
 				return err
 			}
@@ -67,27 +66,4 @@ func imageCmd() *cobra.Command {
 	}
 	cmd.AddCommand(list, prune)
 	return cmd
-}
-
-// baseUsers maps base image keys to the clusters whose disks are overlays of them.
-func baseUsers() (map[string][]string, error) {
-	names, err := state.List()
-	if err != nil {
-		return nil, err
-	}
-	users := map[string][]string{}
-	for _, name := range names {
-		st, err := state.ForCluster(name).Load()
-		if err != nil {
-			continue
-		}
-		seen := map[string]bool{}
-		for _, n := range st.Nodes {
-			if n.Base != "" && !seen[n.Base] {
-				seen[n.Base] = true
-				users[n.Base] = append(users[n.Base], name)
-			}
-		}
-	}
-	return users, nil
 }

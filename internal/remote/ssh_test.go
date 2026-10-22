@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"net"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -53,5 +54,19 @@ func TestSSH_DialStalledHandshake(t *testing.T) {
 	}
 	if d := time.Since(t0); d > 2*time.Second {
 		t.Fatalf("Dial took %s; the handshake must honour the context deadline", d)
+	}
+}
+
+func TestQuote(t *testing.T) {
+	for _, s := range []string{"plain", "with space", "it's", `"double"`, "$HOME `id` $(id)", "a\nb", "-- -x", ""} {
+		t.Run(s, func(t *testing.T) {
+			out, err := exec.Command("sh", "-c", "printf %s "+Quote(s)).Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(out) != s {
+				t.Errorf("sh printf %s = %q, want %q", Quote(s), out, s)
+			}
+		})
 	}
 }

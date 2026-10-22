@@ -105,6 +105,8 @@ proxbase snapshot restore lab ready       # nodes resume where they were
 proxbase ssh lab                    # first node
 proxbase ssh lab pve2 -- pveversion # run a command
 proxbase console lab pve1           # serial console; Enter for a login prompt, Ctrl-] to detach
+proxbase cp ./site.yml lab:pve1:/root/site.yml   # copy to a node (atomic, keeps the mode)
+proxbase cp lab:pve2:/etc/pve/storage.cfg -      # copy from a node to stdout
 proxbase env lab                    # shell exports
 proxbase env lab --format json      # endpoint, token, CA, SSH key, root password, nodes
 proxbase env lab --format terraform # provider block for bpg/proxmox

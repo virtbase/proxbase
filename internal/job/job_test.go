@@ -14,7 +14,8 @@ func TestMain(m *testing.M) {
 	if os.Getenv("PROXBASE_FAKE_JOB") == "1" {
 		fmt.Fprintln(os.Stderr, `{"type":"step","message":"working","elapsed":1}`)
 		fmt.Fprint(os.Stderr, "not json\n")
-		time.Sleep(200 * time.Millisecond)
+		// Long enough that the test sees it running even on a slow, loaded host.
+		time.Sleep(2 * time.Second)
 		fmt.Fprintln(os.Stderr, `{"type":"done"}`)
 		os.Exit(0)
 	}
@@ -40,6 +41,9 @@ func TestJob(t *testing.T) {
 	}
 	if _, err := j.Start("create"); err == nil {
 		t.Error("second job for the same cluster started")
+	}
+	if got := j.Command(); got != "create" {
+		t.Errorf("Command() = %q, want create", got)
 	}
 	select {
 	case <-exited:

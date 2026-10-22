@@ -14,7 +14,10 @@ flowchart TD
     cli --> network
     cli --> mcpserver["mcpserver<br/>MCP tools"]
     mcpserver --> cluster
-    mcpserver --> job["job<br/>detached creates"]
+    mcpserver --> job["job<br/>detached creates, node changes"]
+    cli --> doctor["doctor<br/>host checks"]
+    mcpserver --> doctor
+    mcpserver --> golden
     cluster --> progress["progress<br/>events, text/JSON sinks"]
     job --> progress
     cluster["cluster<br/>orchestration"] --> vm
@@ -64,7 +67,8 @@ flowchart TD
 | `golden` | Cached base images: build, bake, and the personalization of clones from older images |
 | `cluster` | Orchestration: create, lifecycle, nodes, snapshots, faults, status, exec |
 | `progress` | Progress events and sinks: text, JSON lines, MCP notifications |
-| `job` | Runs a create detached from its caller, with a JSON-lines progress log |
+| `job` | Runs a create or node change detached from its caller, with a JSON-lines progress log |
+| `doctor` | Host checks of `proxbase doctor` and the `host_check` tool |
 | `mcpserver` | MCP server (`proxbase mcp`): tools, the schema resource, progress forwarding |
 | `cli` | Commands, flags and output |
 
@@ -153,9 +157,10 @@ sequenceDiagram
     Agent->>MCP: cluster_wait (if still running)
 ```
 
-The create runs as a separate process so it survives client timeouts and restarts
-of the MCP server; everything else (`node_exec`, `cluster_start`, snapshots, faults)
-runs in the server process, guarded by the same cluster lock as the CLI.
+Creates and node changes (`node_add`, `node_remove`) run as a separate process so
+they survive client timeouts and restarts of the MCP server; everything else
+(`node_exec`, files, the API tools, `cluster_start`, snapshots, faults) runs in the
+server process, guarded by the same cluster lock as the CLI.
 
 ## Nodes
 
@@ -189,7 +194,7 @@ runs in the server process, guarded by the same cluster lock as the CLI.
 ├── disks/              <node>-root.qcow2, <node>-dataN.qcow2
 ├── run/                pidfiles, QMP/console sockets, switch and NIC sockets
 └── logs/               install, console, QEMU and switch logs
-~/.local/share/proxbase/jobs/  <cluster>.jsonl, .pid, .yaml of creates started over MCP
+~/.local/share/proxbase/jobs/  <cluster>.jsonl, .pid, .cmd, .yaml of jobs started over MCP
 ~/.cache/proxbase/iso/     ISOs, SHA256SUMS, extracted installer files
 ~/.cache/proxbase/images/  golden base images (create --golden)
 ~/.cache/proxbase/apt/     packages served to the nodes (unused for 30 days: removed)

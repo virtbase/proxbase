@@ -36,6 +36,8 @@ Typical flow:
 4. To reset quickly between tests: create with snapshot="baseline" (or snapshot_save live=true
    once), then cluster_reset returns the cluster to it in seconds.
 5. fault_apply/fault_clear inject failures (power loss, hangs, cable pulls, partitions, latency).
+   node_add/node_remove grow or shrink a cluster in the background (follow with cluster_wait);
+   file_put/file_get copy files to and from nodes; host_check checks this host.
 6. cluster_destroy deletes everything; it needs confirm set to the cluster name.
 
 Clusters persist across sessions; call cluster_list first to reuse one.

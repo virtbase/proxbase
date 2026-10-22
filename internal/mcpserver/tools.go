@@ -30,14 +30,14 @@ type clusterSummary struct {
 	Phase   string `json:"phase"`
 	Nodes   int    `json:"nodes"`
 	Running int    `json:"running"`
-	Job     bool   `json:"createRunning,omitempty"`
+	Job     bool   `json:"jobRunning,omitempty" jsonschema:"a create or node change runs in the background"`
 }
 
 type statusOut struct {
 	Healthy bool            `json:"healthy"`
 	Problem string          `json:"problem,omitempty"`
 	Status  *cluster.Status `json:"status"`
-	Job     *jobOut         `json:"create,omitempty" jsonschema:"progress of a create still running in the background"`
+	Job     *jobOut         `json:"job,omitempty" jsonschema:"the background job (create, node add or remove) and its latest progress"`
 }
 
 type messageOut struct {
@@ -130,7 +130,7 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_list", Description: "List all proxbase clusters on this host with phase and running nodes.", Annotations: readOnly}, h.list)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_status", Description: "Show a cluster: phase, quorum, nodes (running/online, IP, web UI URL, SSH port), Ceph health, active faults, and the progress of a create running in the background. healthy=true means ready, quorate, all nodes online and Ceph HEALTH_OK.", Annotations: readOnly}, h.status)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_create", Description: createDescription, Annotations: local(false, true)}, h.create)
-	mcp.AddTool(s, &mcp.Tool{Name: "cluster_wait", Description: "Wait for a create running in the background (after cluster_create returned running=true), reporting its progress. Returns running=false with the status when it finished, or running=true again after timeoutSeconds.", Annotations: readOnly}, h.wait)
+	mcp.AddTool(s, &mcp.Tool{Name: "cluster_wait", Description: "Wait for the background job of a cluster (after cluster_create, node_add or node_remove returned running=true), reporting its progress. Returns running=false with the status when it finished, or running=true again after timeoutSeconds.", Annotations: readOnly}, h.wait)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_start", Description: "Boot a stopped cluster and wait for quorum, the API and storage. Also boots nodes killed by fault_apply kill. If the call limit (50 s for clients that cancel tool calls after a minute) passes first, it returns healthy=false with what is pending while the nodes keep booting.", Annotations: local(false, true)}, h.start)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_stop", Description: "Shut all nodes of a cluster down (cleanly, then hard after the timeout). Disks are kept; cluster_start boots it again. Clears all faults.", Annotations: local(false, true)}, h.stop)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_destroy", Description: "Delete a cluster: kill its VMs and remove all its disks, snapshots and credentials. Also stops a create running in the background. Set confirm to the cluster name.", Annotations: local(true, true)}, h.destroy)
@@ -141,6 +141,10 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "task_list", Description: taskListDescription, Annotations: readOnly}, h.taskList)
 	mcp.AddTool(s, &mcp.Tool{Name: "task_log", Description: taskLogDescription, Annotations: readOnly}, h.taskLog)
 	mcp.AddTool(s, &mcp.Tool{Name: "task_wait", Description: taskWaitDescription, Annotations: readOnly}, h.taskWait)
+	mcp.AddTool(s, &mcp.Tool{Name: "file_put", Description: filePutDescription, Annotations: local(true, true)}, h.filePut)
+	mcp.AddTool(s, &mcp.Tool{Name: "file_get", Description: fileGetDescription, Annotations: readOnly}, h.fileGet)
+	mcp.AddTool(s, &mcp.Tool{Name: "node_add", Description: nodeAddDescription, Annotations: local(false, false)}, h.nodeAdd)
+	mcp.AddTool(s, &mcp.Tool{Name: "node_remove", Description: nodeRemoveDescription, Annotations: local(true, false)}, h.nodeRemove)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_env", Description: "Return what API and SSH clients need: API endpoint, API token (proxbase@pve!api, full privileges), the cluster CA certificate (PEM and path), SSH user, key path and ports per node. Root password only if includeRootPassword is set.", Annotations: readOnly}, h.env)
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_save", Description: "Snapshot all disks of a stopped cluster (call cluster_stop first), or with live=true the running cluster including its memory. Restoring is much faster than creating again.", Annotations: local(false, false)}, h.snapshotSave)
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_restore", Description: "Reset all disks of a stopped cluster to a snapshot (call cluster_stop first). Changes since the snapshot are lost. After a disk snapshot call cluster_start; a live snapshot starts the cluster in its saved state by itself.", Annotations: local(true, true)}, h.snapshotOp((*cluster.Cluster).SnapshotRestore, "restored"))
@@ -149,6 +153,9 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_list", Description: "List the snapshots of a cluster.", Annotations: readOnly}, h.snapshots)
 	mcp.AddTool(s, &mcp.Tool{Name: "fault_apply", Description: "Inject a failure into a running cluster to test HA, fencing, Ceph or applications: kill, freeze, thaw, link-down, link-up, partition or degrade. fault_clear undoes them.", Annotations: local(true, false)}, h.fault)
 	mcp.AddTool(s, &mcp.Tool{Name: "fault_clear", Description: "Undo all injected faults (thaw, plug cables in, heal partitions and degradations). Killed nodes need cluster_start.", Annotations: local(false, true)}, h.clearFaults)
+	mcp.AddTool(s, &mcp.Tool{Name: "image_list", Description: "List the cached base images (golden images) with the clusters that use them.", Annotations: readOnly}, h.imageList)
+	mcp.AddTool(s, &mcp.Tool{Name: "image_prune", Description: "Delete the base images no cluster uses (dryRun only lists them). The next create with a deleted image builds it again.", Annotations: local(true, true)}, h.imagePrune)
+	mcp.AddTool(s, &mcp.Tool{Name: "host_check", Description: "Check whether this host can run clusters: KVM, nested virtualization, QEMU, free memory, KSM, disk space, free ports and path lengths (as proxbase doctor).", Annotations: readOnly}, h.hostCheck)
 	mcp.AddTool(s, &mcp.Tool{Name: "config_validate", Description: "Check a cluster file (YAML) without creating anything; returns errors, warnings and the file with all defaults. The schema is the resource " + SchemaURI + ".", Annotations: readOnly}, h.validate)
 }
 

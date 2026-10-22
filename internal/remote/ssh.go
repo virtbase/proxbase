@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -88,13 +89,30 @@ type ExecResult struct {
 // Exec runs a command line through the login shell. A non-zero exit is not an
 // error; a cancelled ctx kills the command.
 func (s *SSH) Exec(ctx context.Context, command string) (ExecResult, error) {
+	var stdout, stderr bytes.Buffer
+	code, err := s.run(ctx, command, nil, &stdout, &stderr)
+	return ExecResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: code}, err
+}
+
+// Stream runs a command line with stdin read from in (if not nil) and stdout
+// written to out. A non-zero exit is an error with the command's stderr.
+func (s *SSH) Stream(ctx context.Context, command string, in io.Reader, out io.Writer) error {
+	var stderr bytes.Buffer
+	code, err := s.run(ctx, command, in, out, &stderr)
+	if err == nil && code != 0 {
+		err = fmt.Errorf("exit status %d: %s", code, strings.TrimSpace(stderr.String()))
+	}
+	return err
+}
+
+// run runs command and returns its exit code; -1 if it did not exit normally.
+func (s *SSH) run(ctx context.Context, command string, in io.Reader, stdout, stderr io.Writer) (int, error) {
 	sess, err := s.client.NewSession()
 	if err != nil {
-		return ExecResult{}, fmt.Errorf("ssh session: %w", err)
+		return -1, fmt.Errorf("ssh session: %w", err)
 	}
 	defer sess.Close()
-	var stdout, stderr bytes.Buffer
-	sess.Stdout, sess.Stderr = &stdout, &stderr
+	sess.Stdin, sess.Stdout, sess.Stderr = in, stdout, stderr
 	done := make(chan error, 1)
 	go func() { done <- sess.Run(command) }()
 	select {
@@ -104,19 +122,19 @@ func (s *SSH) Exec(ctx context.Context, command string) (ExecResult, error) {
 		_ = sess.Signal(ssh.SIGKILL)
 		_ = sess.Close()
 		<-done //nolint:errcheck // killed, the error is superseded by ctx.Err()
-		return ExecResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1}, ctx.Err()
+		return -1, ctx.Err()
 	}
-	r := ExecResult{Stdout: stdout.String(), Stderr: stderr.String()}
 	if err == nil {
-		return r, nil
+		return 0, nil
 	}
 	if exit, ok := errors.AsType[*ssh.ExitError](err); ok {
-		r.ExitCode = exit.ExitStatus()
-		return r, nil
+		return exit.ExitStatus(), nil
 	}
-	r.ExitCode = -1
-	return r, fmt.Errorf("run command: %w", err)
+	return -1, fmt.Errorf("run command: %w", err)
 }
+
+// Quote quotes s as one word for a POSIX shell.
+func Quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // Run executes a shell script (passed on stdin to bash) and returns stdout.
 func (s *SSH) Run(script string) (string, error) {

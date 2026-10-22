@@ -49,7 +49,7 @@ func Execute() int {
 	root.PersistentFlags().StringVar(&format, "progress", "text", "progress and messages on stderr: text or json (one JSON object per line)")
 	root.AddCommand(createCmd(), listCmd(), statusCmd(), startCmd(), stopCmd(), destroyCmd(),
 		upCmd(), nodeCmd(), snapshotCmd(), faultCmd(), imageCmd(), sshCmd(), consoleCmd(),
-		envCmd(), doctorCmd(), configCmd(), versionCmd(), switchCmd(), mcpCmd())
+		envCmd(), cpCmd(), doctorCmd(), configCmd(), versionCmd(), switchCmd(), mcpCmd())
 	t0 := time.Now()
 	err := root.ExecuteContext(ctx)
 	e := progress.Event{Time: time.Now(), Type: progress.TypeDone, Elapsed: time.Since(t0).Seconds()}

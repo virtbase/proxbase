@@ -69,6 +69,7 @@ See [fault-injection.md](fault-injection.md).
 | Command | Description |
 | --- | --- |
 | `ssh [cluster] [node] [-- command…]` | SSH as root (default: first node) |
+| `cp <source> <destination>` | Copy a file to or from a node: `[cluster:]node:/path`, a local path or `-` (`--mode`) |
 | `console [cluster] <node>` | Serial console, Ctrl-] to detach |
 | `env [cluster]` | API endpoint and credentials: `--format shell\|json\|terraform`, `--export <dir>` |
 | `mcp` | MCP server on stdio for AI agents (`--call-timeout`, see [mcp.md](mcp.md#call-timeouts)) |

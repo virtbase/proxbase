@@ -43,6 +43,8 @@ func (j Job) Log() string { return j.file(".jsonl") }
 
 func (j Job) pidFile() string { return j.file(".pid") }
 
+func (j Job) cmdFile() string { return j.file(".cmd") }
+
 func (j Job) file(ext string) string { return filepath.Join(dir(), j.cluster+ext) }
 
 // WriteInput stores the cluster file for the job and returns its path.
@@ -58,13 +60,16 @@ func (j Job) WriteInput(data []byte) (string, error) {
 // exited is closed when the job ends, if the caller lives that long.
 func (j Job) Start(args ...string) (exited <-chan struct{}, err error) {
 	if pid := j.PID(); pid != 0 {
-		return nil, fmt.Errorf("a job for cluster %s is already running (pid %d)", j.cluster, pid)
+		return nil, fmt.Errorf("%q is already running for cluster %s (pid %d)", j.Command(), j.cluster, pid)
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(dir(), 0o755); err != nil {
+		return nil, err
+	}
+	if err := state.WriteFileAtomic(j.cmdFile(), []byte(strings.Join(args, " ")), 0o644); err != nil {
 		return nil, err
 	}
 	log, err := os.Create(j.Log())
@@ -88,6 +93,15 @@ func (j Job) Start(args ...string) (exited <-chan struct{}, err error) {
 		close(done)
 	}()
 	return done, err
+}
+
+// Command is the proxbase command line of the latest job, e.g. "node add lab --count 1".
+func (j Job) Command() string {
+	b, err := os.ReadFile(j.cmdFile())
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // PID returns the process ID of the running job, or 0.
@@ -117,7 +131,7 @@ func (j Job) Signal(sig syscall.Signal) error {
 
 // Remove deletes the job's files.
 func (j Job) Remove() {
-	for _, p := range []string{j.Log(), j.pidFile(), j.file(".yaml")} {
+	for _, p := range []string{j.Log(), j.pidFile(), j.cmdFile(), j.file(".yaml")} {
 		_ = os.Remove(p)
 	}
 }

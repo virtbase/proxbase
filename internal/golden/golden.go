@@ -289,6 +289,29 @@ func List() ([]Meta, error) {
 }
 
 // Remove deletes a base image.
+// Users maps base image keys to the clusters whose disks are overlays of them.
+func Users() (map[string][]string, error) {
+	names, err := state.List()
+	if err != nil {
+		return nil, err
+	}
+	users := map[string][]string{}
+	for _, name := range names {
+		st, err := state.ForCluster(name).Load()
+		if err != nil {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, n := range st.Nodes {
+			if n.Base != "" && !seen[n.Base] {
+				seen[n.Base] = true
+				users[n.Base] = append(users[n.Base], name)
+			}
+		}
+	}
+	return users, nil
+}
+
 func Remove(key string) error {
 	_ = os.Remove(filepath.Join(imagesDir(), key+".lock"))
 	return os.RemoveAll(filepath.Join(imagesDir(), key))

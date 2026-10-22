@@ -152,13 +152,9 @@ func (c *Cluster) api(ctx context.Context, name string) (*pve.Client, error) {
 
 // Exec runs a command as root on a running node.
 func (c *Cluster) Exec(ctx context.Context, name, command string) (remote.ExecResult, error) {
-	ns := c.St.Node(name)
-	if ns == nil {
-		return remote.ExecResult{}, fmt.Errorf("cluster %s has no node %q", c.Cfg.Name, name)
-	}
-	s, err := c.ssh(ctx, name)
+	s, err := c.nodeSSH(ctx, name)
 	if err != nil {
-		return remote.ExecResult{}, fmt.Errorf("%s: SSH: %w", name, err)
+		return remote.ExecResult{}, err
 	}
 	defer s.Close()
 	return s.Exec(ctx, command)

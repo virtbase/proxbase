@@ -11,7 +11,7 @@ API token. Use them as disposable test targets.
 
 The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*`,
 `snapshot_*`, `fault_*`) do everything below. Without them, use the CLI (see the end).
-`proxbase doctor` checks the host: KVM, QEMU, memory, ports. Each node needs about
+`host_check` (or `proxbase doctor`) checks the host: KVM, QEMU, memory, ports. Each node needs about
 4 GiB of RAM, 6 GiB with Ceph.
 
 ## The loop
@@ -53,7 +53,9 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
    `/nodes/pve1/qemu`, `/cluster/ha/status/current`); `pve_call` changes things and
    waits for the task it starts. `node_exec` runs shell commands as root
    (`qm config 100`, `journalctl -u pvedaemon -n 50`). Prefer `pve_get`/`pve_call`
-   to `node_exec pvesh`: no quoting, JSON parameters.
+   to `node_exec pvesh`: no quoting, JSON parameters. `file_put` and `file_get` copy
+   configs, scripts and fixtures to and from nodes; `node_add` and `node_remove`
+   change the cluster's size (follow them with `cluster_wait`).
 5. **When something fails, diagnose before guessing.** `cluster_diagnose` returns,
    per node, quorum, failed units, failed tasks, errors of corosync, pmxcfs,
    pveproxy, pvedaemon, HA and Ceph, the clock offset and `ceph health detail`.
@@ -96,6 +98,8 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 | `cluster_create` + `cluster_wait` | `proxbase create <c> --nodes 3 --golden --snapshot baseline` (blocks) |
 | `cluster_env` | `proxbase env <c> [--format shell\|json\|terraform]` |
 | `node_exec` | `proxbase ssh <c> <node> -- <command>` |
+| `file_put`, `file_get` | `proxbase cp <file> <c>:<node>:/path`, `proxbase cp <c>:<node>:/path <file>` |
+| `node_add`, `node_remove` | `proxbase node add <c> --count 1`, `proxbase node remove <c> <node>` |
 | `pve_get`, `pve_call` | `proxbase ssh <c> -- pvesh get <path> --output-format json` |
 | `task_list`, `task_log` | `proxbase ssh <c> -- pvesh get /nodes/<node>/tasks` (`…/tasks/<upid>/log`) |
 | `cluster_reset` | `proxbase stop <c> --timeout 0 && proxbase snapshot restore <c> baseline` (live snapshots resume; disk snapshots need `proxbase start <c>`) |
