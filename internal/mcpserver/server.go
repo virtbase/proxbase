@@ -27,6 +27,8 @@ Typical flow:
    base image (10-20 minutes); later creates clone it (a few minutes). If it returns with
    running=true, call cluster_wait until running=false.
 2. cluster_status: healthy=true means ready, quorate, all nodes online, Ceph HEALTH_OK.
+   When something fails, cluster_diagnose collects quorum, failed units and tasks, service
+   errors, clock offsets and Ceph health of every node in one call.
 3. pve_get and pve_call use the Proxmox VE API with the cluster's token (no shell quoting);
    pve_call waits for the task it starts. node_exec runs shell commands as root on a node
    (e.g. qm, pct, ceph, journalctl). cluster_env returns the API endpoint, token and CA

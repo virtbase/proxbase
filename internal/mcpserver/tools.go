@@ -135,6 +135,7 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_stop", Description: "Shut all nodes of a cluster down (cleanly, then hard after the timeout). Disks are kept; cluster_start boots it again. Clears all faults.", Annotations: local(false, true)}, h.stop)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_destroy", Description: "Delete a cluster: kill its VMs and remove all its disks, snapshots and credentials. Also stops a create running in the background. Set confirm to the cluster name.", Annotations: local(true, true)}, h.destroy)
 	mcp.AddTool(s, &mcp.Tool{Name: "node_exec", Description: "Run a shell command as root on a running node over SSH and return stdout, stderr and the exit code. Use it for pvesh, qm, pct, pvecm, ceph and the like. Non-interactive; output is capped at 64 KiB per stream.", Annotations: local(true, false)}, h.exec)
+	mcp.AddTool(s, &mcp.Tool{Name: "cluster_diagnose", Description: diagnoseDescription, Annotations: readOnly}, h.diagnose)
 	mcp.AddTool(s, &mcp.Tool{Name: "pve_get", Description: pveGetDescription, Annotations: readOnly}, h.pveGet)
 	mcp.AddTool(s, &mcp.Tool{Name: "pve_call", Description: pveCallDescription, Annotations: local(true, false)}, h.pveCall)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_env", Description: "Return what API and SSH clients need: API endpoint, API token (proxbase@pve!api, full privileges), the cluster CA certificate (PEM and path), SSH user, key path and ports per node. Root password only if includeRootPassword is set.", Annotations: readOnly}, h.env)
@@ -214,6 +215,15 @@ func (h *handlers) start(ctx context.Context, req *mcp.CallToolRequest, in clust
 // waits up to 10 seconds for the API.
 const statusMargin = 10 * time.Second
 
+// beforeStatus is the part of a call limit left for work that the status
+// follows (0 means no limit).
+func beforeStatus(limit time.Duration) time.Duration {
+	if limit <= 0 {
+		return 0
+	}
+	return max(limit-statusMargin, limit/2)
+}
+
 // startCluster starts c within the call limit. When the limit passes first, the
 // nodes keep booting and the result says what is still pending.
 func (h *handlers) startCluster(ctx context.Context, req *mcp.CallToolRequest, c *cluster.Cluster) (statusOut, error) {
@@ -225,7 +235,7 @@ func (h *handlers) startCluster(ctx context.Context, req *mcp.CallToolRequest, c
 		var cancelCall, cancelStart context.CancelFunc
 		ctx, cancelCall = context.WithTimeout(ctx, limit)
 		defer cancelCall()
-		sctx, cancelStart = context.WithTimeout(ctx, max(limit-statusMargin, limit/2))
+		sctx, cancelStart = context.WithTimeout(ctx, beforeStatus(limit))
 		defer cancelStart()
 	}
 	err := c.Start(sctx)
