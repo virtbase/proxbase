@@ -84,7 +84,7 @@ sequenceDiagram
     participant VM as QEMU (per node)
     participant Node as node (SSH)
     participant API as Proxmox API
-    CLI->>Img: ISO + SHA256SUMS (cached, verified; no network for a cached exact version)
+    CLI->>Img: ISO + SHA256SUMS (cached and verified, no network for a cached exact version)
     CLI->>SW: start proxbase _switch
     par every node
         CLI->>VM: install: -kernel/-initrd, answer disk PROXMOX-AIS
@@ -93,7 +93,7 @@ sequenceDiagram
         VM->>CLI: fetch the first-boot hook (HTTP on 10.0.2.2)
         VM-->>CLI: power off = installed
     end
-    CLI->>VM: boot nodes (daemonized); clones get their identity as fw_cfg file
+    CLI->>VM: boot nodes (daemonized), clones get their identity as fw_cfg file
     Note over VM: first boot: hook runs before networking
     CLI->>Node: provisioning mode, hosts, repositories, bridges (nodesetup)
     CLI->>API: create cluster on node 1, join the others
