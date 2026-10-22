@@ -80,6 +80,23 @@ restore that cache and resume the cluster in seconds instead of creating it.
 - Each node needs cache space for its disk changes and its memory (about 2 GB for
   one idle 4 GiB node), next to the ISO and base image cache.
 
+## Copilot coding agent
+
+The Copilot coding agent runs on a GitHub Actions runner, which exposes `/dev/kvm`
+like other GitHub-hosted Linux runners. A `copilot-setup-steps.yml` workflow
+prepares it before the agent starts; with the proxbase action it gets a ready
+cluster ([example](../examples/ci/copilot-setup-steps.yml)), and an MCP server entry
+in the repository settings (Copilot > Coding agent) gives it the tools:
+
+```json
+{"mcpServers": {"proxbase": {"type": "local", "command": "proxbase", "args": ["mcp"], "tools": ["*"]}}}
+```
+
+List only the tools the agent needs in `tools` to narrow it down, or run the server
+with `--read-only` or `--toolsets`. This repository's own
+[setup steps](../.github/workflows/copilot-setup-steps.yml) install Go, QEMU and
+golangci-lint and enable KVM, so the agent can run the e2e test.
+
 ## Other CI systems
 
 Any Linux runner with KVM works: install QEMU and the binary, then

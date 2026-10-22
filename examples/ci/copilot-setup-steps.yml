@@ -1,0 +1,32 @@
+# Copilot coding agent with a real Proxmox VE cluster: the proxbase action prepares
+# the agent's runner (KVM, QEMU, proxbase, a cluster) before the agent starts, and
+# an MCP server entry in the repository settings (Copilot > Coding agent) gives the
+# agent the proxbase tools:
+#
+#   {"mcpServers": {"proxbase": {"type": "local", "command": "proxbase", "args": ["mcp"], "tools": ["*"]}}}
+#
+# Copy to .github/workflows/copilot-setup-steps.yml; the job must have this name.
+name: Copilot setup steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+  pull_request:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # A ready cluster "ci"; the agent finds it with cluster_list or proxbase list
+      # and resets it with cluster_reset.
+      - uses: virtbase/proxbase@v0      # pin a commit SHA in real workflows
+        with:
+          name: ci
+          nodes: "1"

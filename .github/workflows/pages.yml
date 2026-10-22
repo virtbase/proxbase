@@ -1,11 +1,11 @@
 name: Pages
 
-# Publishes the JSON schema at https://proxbase.virtbase.com/schema/ and the MCP
-# registry entry at https://proxbase.virtbase.com/server.json.
+# Publishes the JSON schema at https://proxbase.virtbase.com/schema/, the MCP
+# registry entry at https://proxbase.virtbase.com/server.json and llms.txt.
 on:
   push:
     branches: [main]
-    paths: [schema/**, server.json, .github/workflows/pages.yml]
+    paths: [schema/**, server.json, llms.txt, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions: {}
@@ -31,6 +31,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -r schema _site/schema
+          cp llms.txt _site/llms.txt
           # the image tag follows "version", which release-please bumps
           jq '.packages[0].identifier = "ghcr.io/virtbase/proxbase:" + .version' server.json > _site/server.json
           echo proxbase.virtbase.com > _site/CNAME

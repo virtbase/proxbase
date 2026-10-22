@@ -1,0 +1,24 @@
+# Proxbase
+
+> Proxbase creates real Proxmox VE clusters as QEMU/KVM VMs on a Linux host in about a minute, for labs, demos, CI and AI agents: stock ISO installs, ZFS or Ceph storage, internal networks, snapshots, fault injection, an API token for Terraform or Ansible, and an MCP server (`proxbase mcp`).
+
+## Docs
+
+- [Getting started](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/getting-started.md): requirements, first cluster, credentials
+- [CLI reference](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/cli.md): all commands and flags
+- [Configuration](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/configuration.md): the cluster file, defaults, templates
+- [MCP server](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/mcp.md): tools, prompts, resources, call timeouts, security, HTTP mode
+- [Lifecycle](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/lifecycle.md): start, stop, nodes, snapshots, lifetime, files, tokens
+- [Fault injection](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/fault-injection.md): power loss, hangs, partitions, latency
+- [CI and automation](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/ci.md): GitHub Action, Copilot coding agent, JSON progress
+- [Architecture](https://raw.githubusercontent.com/virtbase/proxbase/main/docs/architecture.md): packages, create flow, state on disk
+
+## Agents
+
+- [Skill](https://raw.githubusercontent.com/virtbase/proxbase/main/plugins/proxbase/skills/proxbase/SKILL.md): the create, test, diagnose, reset loop for coding agents
+- [AGENTS.md](https://raw.githubusercontent.com/virtbase/proxbase/main/AGENTS.md): working on the proxbase code itself
+
+## Optional
+
+- [Cluster file JSON schema](https://proxbase.virtbase.com/schema/v1alpha1/cluster.json)
+- [Examples](https://github.com/virtbase/proxbase/tree/main/examples): cluster files, Terraform, Ansible, CI

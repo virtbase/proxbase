@@ -10,6 +10,7 @@
 | [terraform/](terraform) | Test Terraform/OpenTofu code with the bpg/proxmox provider |
 | [ansible/](ansible) | Dynamic inventory and a playbook against the nodes |
 | [ci/github-actions.yml](ci/github-actions.yml) | Integration tests against a real cluster in GitHub Actions, with the proxbase action |
+| [ci/copilot-setup-steps.yml](ci/copilot-setup-steps.yml) | A cluster and the proxbase MCP tools for the Copilot coding agent |
 | [compose/](compose) | Run a cluster with Docker Compose |
 
 All cluster files are checked by `go test ./internal/config`. Run one with

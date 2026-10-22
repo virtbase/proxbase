@@ -6,3 +6,4 @@
 coverage.txt
 /examples/compose/.env
 /examples/compose/export/
+/.claude/worktrees/

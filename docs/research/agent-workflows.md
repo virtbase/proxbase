@@ -63,41 +63,30 @@ Desktop on macOS/Windows and matter little for a Linux/KVM tool.
 
 ## Roadmap
 
-### P0
+Status as of the end of October 2026.
 
-1. **Timeouts every client survives.** Tool waits default below 60 s; `cluster_wait`
-   continues. Document client settings (Codex `tool_timeout_sec`).
-2. **Skill and plugin.** Teach the loop: reuse or create, baseline snapshot, iterate
-   with reset, diagnose on failure, destroy. References for Terraform (bpg/proxmox),
-   Ansible, API clients, HA and Ceph fault tests.
-3. **`pve_api`.** Call the PVE API of a cluster with its token: GET is read-only, other
-   methods are a separate, destructive tool. Removes shell quoting through
-   `node_exec pvesh`.
-4. **`cluster_diagnose`.** Quorum, failed tasks, recent errors of corosync, pmxcfs,
-   pveproxy and pvedaemon, `ceph health detail`, clock offsets, in one result.
-5. **`cluster_reset`.** Restore a snapshot (default `baseline`), start, wait until
-   healthy; `cluster_create` can save the baseline.
+| Priority | Item | Status |
+| --- | --- | --- |
+| P0 | Timeouts every client survives (`--call-timeout`, 50 s for clients other than Claude Code) | Done (#21) |
+| P0 | Skill and plugin (Claude Code marketplace, `npx skills add`) | Done (#25) |
+| P0 | `pve_get`, `pve_call` | Done (#22) |
+| P0 | `cluster_diagnose` | Done (#23) |
+| P0 | `cluster_reset`, baseline snapshot after create | Done (#24) |
+| P1 | `task_list`, `task_log`, `task_wait` | Done (#26) |
+| P1 | `node_add`, `node_remove`, `image_list`, `image_prune`, `host_check`, `file_put`, `file_get`, `proxbase cp` | Done (#27) |
+| P1 | `cluster_plan` (dry run), capacity warnings, automatic port ranges | Done (#29) |
+| P1 | Owner and lifetime per cluster, `proxbase gc`, `cluster_gc` | Done (#30) |
+| P1 | Scoped API tokens (`token_create`, `env --token`) | Done (#31) |
+| P1 | `--read-only`, `--toolsets`, `--audit-log` | Done (#32) |
+| P1 | VM and container templates in the cluster file | Done (#33); declarative guests (`guests:`) left out: `pve_call` creates them |
+| P2 | Prompts, resource templates and links, completions, icon, elicitation | Done (#34) |
+| P2 | Streamable HTTP with a bearer token | Done (#35), stateful sessions for older clients' progress and elicitation |
+| P2 | `AGENTS.md`, `llms.txt`, Copilot coding agent setup steps | Done |
+| P2 | MCP Tasks and MCP Apps | Waiting for go-sdk and coding clients |
 
-### P1
-
-- Task tools: `task_list`, `task_log`, `task_wait` by UPID.
-- Fixtures: cloud-image and LXC templates in the golden image, `guests:` and
-  `templates:` in the cluster file.
-- Isolation per agent: cluster names from the worktree, `owner` and TTL labels,
-  `proxbase gc --expired`, a host capacity check before create.
-- `proxbase mcp --read-only --toolsets …` and a JSONL audit log of mutating calls.
-- `dryRun` for `cluster_create`: resolved file, ports, resource estimate.
-- Least-privilege tokens per role from `cluster_env`.
-- MCP tools for `node add/remove`, `image list/prune` and `doctor`; file put/get.
-
-### P2
-
-- Prompts, completions for cluster/node/snapshot names, icons, resource links to logs,
-  elicitation before destroy (keeping `confirm`).
-- Stateless Streamable HTTP so sandboxed agents without KVM can use a remote host.
-- `AGENTS.md` and `llms.txt`; Copilot coding agent via `copilot-setup-steps.yml` once
-  KVM on its runners is confirmed.
-- MCP Tasks and MCP Apps once go-sdk and coding clients support them.
+Cluster names from the worktree stay a convention of the skill (name clusters after
+the task or worktree) rather than a default, so that two agents in one worktree do not
+share a cluster by accident.
 
 ## Sources
 

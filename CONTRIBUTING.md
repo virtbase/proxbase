@@ -12,7 +12,8 @@ open an issue first so we can agree on the approach.
   quickest end-to-end check (about 3 minutes once the ISO is cached)
 
 The package layout and extension points (node runtime, storage backends, networks) are
-described in [docs/architecture.md](docs/architecture.md).
+described in [docs/architecture.md](docs/architecture.md). Coding agents find the same
+in [AGENTS.md](AGENTS.md).
 
 After changing the cluster file format, run `make schema` to update the published
 schema in `schema/` (a test fails otherwise).
