@@ -28,7 +28,24 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`,
    - 3 nodes: clustering, migration, HA.
    - `"storage": "ceph"` (3+ nodes): Ceph. `"storage": "none"`: no data pool.
    - Networks, VLANs, disks: pass a cluster file as `config` (YAML); check it
-     with `config_validate`, the schema is the server's resource.
+     with `config_validate`, the schema is the server's resource. Fields sit at
+     the top level (no `metadata` or `spec`), for example:
+
+     ```yaml
+     nodes:
+       count: 3
+       defaults: {memory: 6G, dataDisks: [{size: 32G}, {size: 32G}]}
+     networks:
+       - {name: cluster, cidr: 10.10.10.0/24, roles: [corosync]}
+       - {name: storage, cidr: 10.10.20.0/24, roles: [ceph-public, ceph-cluster]}
+     storage:
+       ceph: {enabled: true}
+     access: {portBase: 19000}
+     ```
+
+   - Clusters that run at the same time need different ports: if a create fails
+     with "port … is in use", pass `config: "access: {portBase: 19000}"` (node N
+     gets the API on portBase+N and SSH on portBase+100+N).
 3. **Connect the code under test** with `cluster_env`: endpoint, API token,
    CA certificate. In a shell, `eval "$(proxbase env <cluster>)"` exports
    `PROXMOX_VE_ENDPOINT`, `PROXMOX_VE_API_TOKEN`, `PROXBASE_CA_CERT` and more.
