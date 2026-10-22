@@ -71,7 +71,7 @@ flowchart TD
 | `progress` | Progress events and sinks: text, JSON lines, MCP notifications |
 | `job` | Runs a create or node change detached from its caller, with a JSON-lines progress log |
 | `doctor` | Host checks of `proxbase doctor` and the `host_check` tool |
-| `mcpserver` | MCP server (`proxbase mcp`): tools in toolsets, prompts, resources and completions, progress forwarding, call limits, elicitation, read-only mode and the audit log |
+| `mcpserver` | MCP server (`proxbase mcp`) over stdio or Streamable HTTP with a bearer token: tools in toolsets, prompts, resources and completions, progress forwarding, call limits, elicitation, read-only mode and the audit log |
 | `selfupdate` | `proxbase upgrade`: find a GitHub release, verify it (SHA-256, cosign), detect package-manager installs, replace the binary atomically |
 | `cli` | Commands, flags and output |
 
@@ -209,6 +209,7 @@ server process, guarded by the same cluster lock as the CLI.
 ├── run/                pidfiles, QMP/console sockets, switch and NIC sockets
 └── logs/               install, console, QEMU and switch logs
 ~/.local/share/proxbase/new.lock   held while a new cluster chooses its ports
+~/.local/share/proxbase/mcp-token  bearer token of proxbase mcp --http (0600)
 ~/.local/share/proxbase/jobs/  <cluster>.jsonl, .pid, .cmd, .yaml of jobs started over MCP
 ~/.cache/proxbase/iso/     ISOs, SHA256SUMS, extracted installer files
 ~/.cache/proxbase/images/  golden base images (create --golden)

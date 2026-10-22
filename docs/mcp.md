@@ -127,6 +127,39 @@ elicitation (clients of protocol 2026-07-28 get an input request and call again)
 Tools with large results (`node_exec`, `cluster_diagnose`, `pve_get`, `task_log`,
 `file_get`) set `anthropic/maxResultSizeChars` so Claude Code shows them inline.
 
+## Remote agents (HTTP)
+
+Agents that run elsewhere, such as cloud agents or sandboxes without KVM, reach a
+proxbase host over Streamable HTTP:
+
+```bash
+proxbase mcp --http 127.0.0.1:8765          # token generated once: ~/.local/share/proxbase/mcp-token
+proxbase mcp --http 0.0.0.0:8765 --tls-cert cert.pem --tls-key key.pem --token-file token
+```
+
+- Every request needs `Authorization: Bearer <token>` (compared in constant time).
+  Off loopback, TLS is required, so the token and cluster credentials never cross
+  a network in clear text. The SDK's DNS rebinding protection and Go's
+  cross-origin protection guard the loopback listener against browsers.
+- The tools, prompts and resources are the same as over stdio, and so are the
+  flags (`--read-only`, `--toolsets`, `--audit-log`, `--call-timeout`); progress
+  notifications stream in the responses.
+- `cluster_env` returns endpoints on the proxbase host (`127.0.0.1`): a remote agent
+  uses the cluster through `pve_get`, `pve_call`, `node_exec` and `file_*`, or the
+  clusters set `access.bindAddress` to an address it can reach.
+
+Claude Code and Codex:
+
+```bash
+claude mcp add --transport http proxbase https://lab-host:8765/mcp --header "Authorization: Bearer $(cat token)"
+```
+
+```toml
+[mcp_servers.proxbase]
+url = "https://lab-host:8765/mcp"
+bearer_token_env_var = "PROXBASE_MCP_TOKEN"
+```
+
 ## Skill and plugin
 
 The tools say what they do; the proxbase skill teaches agents how to use them
@@ -220,8 +253,9 @@ agent → cluster_destroy {"cluster": "lab", "confirm": "lab"}
 ## Security
 
 The server runs with the rights of the user who starts it and can create VMs,
-run commands as root inside them and delete clusters. It only talks to its client
-over stdio and opens no network port. `cluster_env` returns the API token (full
+run commands as root inside them and delete clusters. Over stdio it only talks to
+its client and opens no network port; with `--http` see
+[remote agents](#remote-agents-http). `cluster_env` returns the API token (full
 privileges on the lab cluster) and, on request, the root password; treat the
 conversation accordingly. To give code under test less, hand it a scoped token from
 `token_create`. Progress and errors are logged to stderr.
