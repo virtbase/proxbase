@@ -46,10 +46,18 @@ func (c *Cluster) requireStopped() error {
 	return nil
 }
 
+// CheckSnapshotName validates the name of a snapshot.
+func CheckSnapshotName(name string) error {
+	if !snapRe.MatchString(name) {
+		return fmt.Errorf("invalid snapshot name %q: letters, digits, '.', '_' and '-', at most 40", name)
+	}
+	return nil
+}
+
 // checkNewSnapshot validates the name of a snapshot about to be saved.
 func (c *Cluster) checkNewSnapshot(name string) error {
-	if !snapRe.MatchString(name) {
-		return fmt.Errorf("invalid snapshot name %q", name)
+	if err := CheckSnapshotName(name); err != nil {
+		return err
 	}
 	if c.St.Phase != state.PhaseReady {
 		return fmt.Errorf("cluster is %s; snapshots need a ready cluster", c.St.Phase)

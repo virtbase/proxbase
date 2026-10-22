@@ -4,6 +4,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"strings"
@@ -46,14 +47,15 @@ func TestE2E(t *testing.T) {
 	t.Cleanup(func() { cs.Close() }) // runs after the destroy registered below
 	t.Logf("server %s %s", cs.InitializeResult().ServerInfo.Name, cs.InitializeResult().ServerInfo.Version)
 
-	if state.ForCluster(name).Exists() {
+	created := !state.ForCluster(name).Exists()
+	if !created {
 		t.Logf("using existing cluster %s", name)
 	} else {
 		t.Cleanup(func() {
 			res, _ := call(t, cs, "cluster_destroy", map[string]any{"cluster": name, "confirm": name})
 			t.Logf("cluster_destroy: %s", text(res))
 		})
-		res, out := call(t, cs, "cluster_create", map[string]any{"name": name, "timeoutSeconds": 3000})
+		res, out := call(t, cs, "cluster_create", map[string]any{"name": name, "snapshot": "baseline", "timeoutSeconds": 3000})
 		if res.IsError {
 			t.Fatalf("cluster_create: %s", text(res))
 		}
@@ -87,6 +89,52 @@ func TestE2E(t *testing.T) {
 		t.Errorf("cluster_env: %s", text(res))
 	}
 
+	res, out = call(t, cs, "pve_get", map[string]any{"cluster": name, "path": "/cluster/resources", "params": map[string]any{"type": "node"}})
+	resources, _ := out["data"].([]any)
+	if res.IsError || len(resources) == 0 {
+		t.Fatalf("pve_get /cluster/resources: %s", text(res))
+	}
+	node, _ := resources[0].(map[string]any)["node"].(string)
+	res, out = call(t, cs, "pve_call", map[string]any{"cluster": name, "method": "POST", "path": "/nodes/" + node + "/startall"})
+	task, _ := out["task"].(map[string]any)
+	if res.IsError || task["status"] != "stopped" || task["exitStatus"] != "OK" {
+		t.Errorf("pve_call startall (a task): %s", text(res))
+	}
+	res, out = call(t, cs, "cluster_diagnose", map[string]any{"cluster": name})
+	reports, _ := out["nodes"].([]any)
+	if res.IsError || out["healthy"] != true || len(reports) == 0 || reports[0].(map[string]any)["quorum"] == nil {
+		t.Errorf("cluster_diagnose: %s", text(res))
+	}
+	t.Logf("cluster_diagnose: %.1500s", text(res))
+
+	// A change after a live snapshot is gone after cluster_reset.
+	pools := func() string {
+		_, out := call(t, cs, "pve_get", map[string]any{"cluster": name, "path": "/pools"})
+		b, _ := json.Marshal(out["data"])
+		return string(b)
+	}
+	if res, _ = call(t, cs, "snapshot_save", map[string]any{"cluster": name, "name": "e2e-live", "live": true}); res.IsError {
+		t.Fatalf("snapshot_save live: %s", text(res))
+	}
+	if res, _ = call(t, cs, "pve_call", map[string]any{"cluster": name, "method": "POST", "path": "/pools", "params": map[string]any{"poolid": "e2e"}}); res.IsError {
+		t.Errorf("pve_call POST /pools: %s", text(res))
+	}
+	if !strings.Contains(pools(), `"e2e"`) {
+		t.Errorf("pool e2e not created: %s", pools())
+	}
+	t0 := time.Now()
+	res, out = call(t, cs, "cluster_reset", map[string]any{"cluster": name, "snapshot": "e2e-live"})
+	if res.IsError || out["healthy"] != true || out["live"] != true {
+		t.Fatalf("cluster_reset: %s", text(res))
+	}
+	t.Logf("cluster_reset to a live snapshot: %s", time.Since(t0).Round(time.Second))
+	if p := pools(); strings.Contains(p, `"e2e"`) {
+		t.Errorf("pool e2e still there after the reset: %s", p)
+	}
+	if res, _ = call(t, cs, "snapshot_delete", map[string]any{"cluster": name, "name": "e2e-live"}); res.IsError {
+		t.Errorf("snapshot_delete: %s", text(res))
+	}
+
 	for _, step := range []struct {
 		tool string
 		args map[string]any
@@ -104,8 +152,9 @@ func TestE2E(t *testing.T) {
 		t.Logf("%s: %s (%s)", step.tool, firstLine(text(res)), time.Since(t0).Round(time.Second))
 	}
 	res, out = call(t, cs, "snapshot_list", map[string]any{"cluster": name})
-	if snaps, _ := out["snapshots"].([]any); len(snaps) != 1 {
-		t.Errorf("snapshot_list: %s", text(res))
+	snaps, _ := json.Marshal(out["snapshots"])
+	if !strings.Contains(string(snaps), `"name":"clean"`) || (created && !strings.Contains(string(snaps), `"name":"baseline"`)) {
+		t.Errorf("snapshot_list (want clean, and baseline from the create): %s", text(res))
 	}
 	res, out = call(t, cs, "cluster_status", map[string]any{"cluster": name})
 	if out["healthy"] != true {

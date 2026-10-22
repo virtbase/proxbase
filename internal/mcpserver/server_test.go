@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/virtbase/proxbase/internal/progress"
 )
 
 // The test binary stands in for proxbase when a tool starts a job: it prints
@@ -25,7 +27,8 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, `{"type":"error","error":"boom","hint":"Re-run `+"`proxbase create lab`"+` to resume"}`)
 		os.Exit(1)
 	case "slow":
-		fmt.Fprintln(os.Stderr, `{"type":"step","cluster":"lab","message":"installing pve1","elapsed":0.1}`)
+		b, _ := json.Marshal(progress.Event{Type: progress.TypeStep, Cluster: "lab", Message: "args: " + strings.Join(os.Args[1:], " ")})
+		fmt.Fprintln(os.Stderr, string(b))
 		time.Sleep(time.Minute)
 		os.Exit(1)
 	}
@@ -164,7 +167,7 @@ func TestTools(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	for _, want := range []string{"cluster_list", "cluster_status", "cluster_create", "cluster_wait", "cluster_start", "cluster_stop",
-		"cluster_destroy", "node_exec", "cluster_diagnose", "pve_get", "pve_call", "cluster_env", "snapshot_save", "snapshot_restore", "snapshot_list", "fault_apply", "fault_clear", "config_validate"} {
+		"cluster_destroy", "cluster_reset", "node_exec", "cluster_diagnose", "pve_get", "pve_call", "cluster_env", "snapshot_save", "snapshot_restore", "snapshot_list", "fault_apply", "fault_clear", "config_validate"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("tool %s missing (have %v)", want, names)
 		}
@@ -236,6 +239,14 @@ func TestEmptyHost(t *testing.T) {
 	if !res.IsError {
 		t.Errorf("fault on a missing cluster succeeded")
 	}
+	res, _ = call(t, cs, "cluster_create", map[string]any{"name": "lab", "snapshot": "no/slash"})
+	if !res.IsError || !strings.Contains(text(res), "invalid snapshot name") {
+		t.Errorf("create with a bad snapshot name: %s", text(res))
+	}
+	res, _ = call(t, cs, "cluster_reset", map[string]any{"cluster": "lab"})
+	if !res.IsError || !strings.Contains(text(res), "does not exist") {
+		t.Errorf("reset of a missing cluster: %s", text(res))
+	}
 }
 
 func TestCreateReportsJobProgress(t *testing.T) {
@@ -268,12 +279,19 @@ func TestCreateReturnsWithinCallLimit(t *testing.T) {
 	cs, _ := connectAs(t, "codex-mcp-client", Options{CallTimeout: 2 * time.Second})
 	t.Setenv("PROXBASE_FAKE_JOB", "slow")
 	t0 := time.Now()
-	res, out := call(t, cs, "cluster_create", map[string]any{"name": "lab", "timeoutSeconds": 600})
+	res, out := call(t, cs, "cluster_create", map[string]any{"name": "lab", "snapshot": "baseline", "timeoutSeconds": 600})
 	if d := time.Since(t0); d > 10*time.Second {
 		t.Errorf("create blocked for %s with a 2s call limit", d)
 	}
 	if res.IsError || out["running"] != true {
 		t.Errorf("create result: running=%v %s", out["running"], text(res))
+	}
+	if !strings.Contains(text(res), "--snapshot baseline") {
+		t.Errorf("the create job did not get the snapshot: %s", text(res))
+	}
+	res, _ = call(t, cs, "cluster_reset", map[string]any{"cluster": "lab"})
+	if !res.IsError || !strings.Contains(text(res), "a create is running") {
+		t.Errorf("reset during a create: %s", text(res))
 	}
 	// The create kept running in the background; destroying stops it.
 	if res, _ = call(t, cs, "cluster_destroy", map[string]any{"cluster": "lab", "confirm": "lab"}); res.IsError {

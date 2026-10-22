@@ -68,7 +68,7 @@ Clusters created in the container live in the `proxbase` volume; use
 | `cluster_list` | All clusters with phase and running nodes |
 | `cluster_status` | Phase, quorum, nodes, Ceph health, faults; `healthy` and `problem` |
 | `cluster_diagnose` | Everything that explains a problem in one call: status plus, per node, quorum, failed units and tasks, errors of corosync, pmxcfs, pveproxy, HA and Ceph (`sinceMinutes`, default 30), clock offset, `ceph health detail`; the console of stopped nodes; host log files |
-| `cluster_create` | Create (or resume) a cluster from parameters or a cluster file; reports progress |
+| `cluster_create` | Create (or resume) a cluster from parameters or a cluster file; reports progress; `snapshot: baseline` saves a live snapshot when it is ready |
 | `cluster_wait` | Keep waiting for a create that is still running |
 | `cluster_start`, `cluster_stop` | Boot or shut down all nodes |
 | `cluster_destroy` | Delete a cluster; `confirm` must repeat the cluster name |
@@ -77,6 +77,7 @@ Clusters created in the container live in the `proxbase` volume; use
 | `pve_call` | POST, PUT or DELETE through the API; waits for the task it starts and returns its exit status and log, a failed task is an error |
 | `cluster_env` | API endpoint, token, CA certificate, SSH key and ports; root password only with `includeRootPassword` |
 | `snapshot_save`, `snapshot_restore`, `snapshot_delete`, `snapshot_list` | Snapshots of the stopped cluster, or with `live` of the running cluster including memory (restoring resumes it) |
+| `cluster_reset` | Back to a snapshot (default `baseline`) in one call: power off, restore, start or resume; returns the status |
 | `fault_apply`, `fault_clear` | kill, freeze, thaw, link-down/up, partition, degrade |
 | `config_validate` | Check a cluster file; returns errors, warnings and the file with defaults |
 

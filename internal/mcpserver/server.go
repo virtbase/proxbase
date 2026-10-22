@@ -33,7 +33,8 @@ Typical flow:
    pve_call waits for the task it starts. node_exec runs shell commands as root on a node
    (e.g. qm, pct, ceph, journalctl). cluster_env returns the API endpoint, token and CA
    certificate for your own API clients.
-4. To reset quickly between tests: cluster_stop, snapshot_save once, then snapshot_restore + cluster_start.
+4. To reset quickly between tests: create with snapshot="baseline" (or snapshot_save live=true
+   once), then cluster_reset returns the cluster to it in seconds.
 5. fault_apply/fault_clear inject failures (power loss, hangs, cable pulls, partitions, latency).
 6. cluster_destroy deletes everything; it needs confirm set to the cluster name.
 

@@ -24,6 +24,7 @@ holding the ZFS pool "tank". Set nodes: 3 for a real cluster, storage: ceph for 
 The create runs in the background on this host and survives this connection; the tool reports
 progress and returns when the cluster is ready, or with running=true after timeoutSeconds
 (then call cluster_wait). Cancelling the call cancels the create (re-run to resume).
+With snapshot="baseline" it saves a live snapshot when ready, which cluster_reset returns to in seconds.
 Needs free memory for all nodes; the first create downloads a ~1.5 GB ISO.`
 
 type createIn struct {
@@ -37,6 +38,7 @@ type createIn struct {
 	Storage        string `json:"storage,omitempty" jsonschema:"storage on the data disks: zfs, ceph or none"`
 	PVEVersion     string `json:"pveVersion,omitempty" jsonschema:"Proxmox VE ISO version, e.g. 9.2 or 9.2-1 (default: newest supported)"`
 	Golden         *bool  `json:"golden,omitempty" jsonschema:"clone nodes from a cached installed base image instead of installing each (default true; the first create builds the image)"`
+	Snapshot       string `json:"snapshot,omitempty" jsonschema:"save a live snapshot with this name when the cluster is ready, e.g. baseline; cluster_reset returns to it in seconds"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"return after this many seconds while the create keeps running (default 600, max 3600; at most 50 for clients that cancel tool calls after a minute)"`
 }
 
@@ -93,6 +95,13 @@ func (h *handlers) create(ctx context.Context, req *mcp.CallToolRequest, in crea
 	if err != nil {
 		return nil, jobOut{}, err
 	}
+	args := []string{"create"}
+	if in.Snapshot != "" {
+		if err := cluster.CheckSnapshotName(in.Snapshot); err != nil {
+			return nil, jobOut{}, err
+		}
+		args = append(args, "--snapshot", in.Snapshot)
+	}
 	if d := state.ForCluster(cfg.Name); d.Exists() {
 		if st, err := d.Load(); err == nil && st.Phase == state.PhaseReady {
 			return nil, jobOut{}, fmt.Errorf("cluster %q already exists and is ready; use it, or cluster_destroy it first", cfg.Name)
@@ -110,7 +119,7 @@ func (h *handlers) create(ctx context.Context, req *mcp.CallToolRequest, in crea
 	if err != nil {
 		return nil, jobOut{}, err
 	}
-	exited, err := j.Start("create", "-f", file)
+	exited, err := j.Start(append(args, "-f", file)...)
 	if err != nil {
 		return nil, jobOut{}, err
 	}

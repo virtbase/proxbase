@@ -142,6 +142,7 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_save", Description: "Snapshot all disks of a stopped cluster (call cluster_stop first), or with live=true the running cluster including its memory. Restoring is much faster than creating again.", Annotations: local(false, false)}, h.snapshotSave)
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_restore", Description: "Reset all disks of a stopped cluster to a snapshot (call cluster_stop first). Changes since the snapshot are lost. After a disk snapshot call cluster_start; a live snapshot starts the cluster in its saved state by itself.", Annotations: local(true, true)}, h.snapshotOp((*cluster.Cluster).SnapshotRestore, "restored"))
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_delete", Description: "Delete a snapshot of a cluster.", Annotations: local(true, true)}, h.snapshotOp((*cluster.Cluster).SnapshotDelete, "deleted"))
+	mcp.AddTool(s, &mcp.Tool{Name: "cluster_reset", Description: resetDescription, Annotations: local(true, true)}, h.reset)
 	mcp.AddTool(s, &mcp.Tool{Name: "snapshot_list", Description: "List the snapshots of a cluster.", Annotations: readOnly}, h.snapshots)
 	mcp.AddTool(s, &mcp.Tool{Name: "fault_apply", Description: "Inject a failure into a running cluster to test HA, fencing, Ceph or applications: kill, freeze, thaw, link-down, link-up, partition or degrade. fault_clear undoes them.", Annotations: local(true, false)}, h.fault)
 	mcp.AddTool(s, &mcp.Tool{Name: "fault_clear", Description: "Undo all injected faults (thaw, plug cables in, heal partitions and degradations). Killed nodes need cluster_start.", Annotations: local(false, true)}, h.clearFaults)
@@ -207,7 +208,7 @@ func (h *handlers) start(ctx context.Context, req *mcp.CallToolRequest, in clust
 	if err != nil {
 		return nil, statusOut{}, err
 	}
-	out, err := h.startCluster(ctx, req, c)
+	out, err := startCluster(ctx, c, h.limit(req))
 	return nil, out, err
 }
 
@@ -224,11 +225,10 @@ func beforeStatus(limit time.Duration) time.Duration {
 	return max(limit-statusMargin, limit/2)
 }
 
-// startCluster starts c within the call limit. When the limit passes first, the
-// nodes keep booting and the result says what is still pending.
-func (h *handlers) startCluster(ctx context.Context, req *mcp.CallToolRequest, c *cluster.Cluster) (statusOut, error) {
+// startCluster starts c within limit (0 means no limit). When the limit passes
+// first, the nodes keep booting and the result says what is still pending.
+func startCluster(ctx context.Context, c *cluster.Cluster, limit time.Duration) (statusOut, error) {
 	sctx := ctx
-	limit := h.limit(req)
 	if limit > 0 {
 		// The whole call ends at the limit, the status included; the start
 		// leaves room for the status.

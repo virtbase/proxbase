@@ -96,6 +96,8 @@ proxbase snapshot restore lab ready       # nodes resume where they were
 - It loads only into the same QEMU version on the same CPU model (nodes use
   `-cpu host`); after a QEMU upgrade, take it again.
 - `snapshot delete` works on a running cluster for live snapshots.
+- `proxbase create lab --snapshot ready` saves one as soon as the cluster is ready;
+  MCP agents return to it with `cluster_reset`.
 
 ## Access
 

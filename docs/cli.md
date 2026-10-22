@@ -33,6 +33,7 @@ Flags of `create` and `up` (they override fields of the file, see
 | `--golden` | Clone nodes from a cached base image ([golden images](golden-images.md)) |
 | `--bind-address` | Address of the UI/SSH forwards (default `$PROXBASE_BIND_ADDRESS` or `127.0.0.1`) |
 | `--dry-run` | `create` only: print the resolved file (`-o yaml\|json`) |
+| `--snapshot` | `create` only: save a live snapshot with this name when the cluster is ready (kept if it exists) |
 | `-o, --output` | `create` only: `table` or `json` |
 | `--stop-timeout` | `up` only: clean shutdown time on SIGTERM (default 2m) |
 
