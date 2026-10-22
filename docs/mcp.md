@@ -8,7 +8,13 @@ proxbase clusters, so the CLI sees them too and vice versa.
 
 ## Setup
 
-Claude Code:
+Claude Code, with the [skill](#skill-and-plugin) (needs `proxbase` on `PATH`):
+
+```text
+/plugin install proxbase --marketplace virtbase/proxbase
+```
+
+Claude Code, only the server:
 
 ```bash
 claude mcp add proxbase -- proxbase mcp
@@ -84,6 +90,20 @@ Clusters created in the container live in the `proxbase` volume; use
 The resource `https://proxbase.virtbase.com/schema/v1alpha1/cluster.json` is the JSON
 schema of cluster files. Tool annotations mark read-only and destructive tools, so
 clients can ask before `cluster_destroy`, `snapshot_restore`, `fault_apply` or `pve_call`.
+
+## Skill and plugin
+
+The tools say what they do; the proxbase skill teaches agents how to use them
+together: reuse or create a cluster with a `baseline` snapshot, connect the code
+under test, `cluster_diagnose` before guessing, `cluster_reset` between runs, and
+destroy only their own clusters. Its references cover Terraform (bpg/proxmox),
+Ansible, HA and Ceph fault tests and CI. It is an [Agent Skill](https://agentskills.io)
+in [`plugins/proxbase/skills/proxbase`](../plugins/proxbase/skills/proxbase/SKILL.md).
+
+| Agent | Install |
+| --- | --- |
+| Claude Code | `/plugin install proxbase --marketplace virtbase/proxbase`: plugin with the skill and the MCP server, or `/plugin marketplace add virtbase/proxbase` and `/plugin install proxbase@virtbase` |
+| Codex, Cursor, others | `npx skills add virtbase/proxbase`: copies the skill to `.agents/skills/proxbase` in the project (`-g` for your user); add the MCP server as above |
 
 ## Long-running creates
 

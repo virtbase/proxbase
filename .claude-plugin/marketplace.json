@@ -1,0 +1,12 @@
+{
+  "name": "virtbase",
+  "description": "Plugins from Virtbase",
+  "owner": { "name": "Virtbase", "url": "https://github.com/virtbase" },
+  "plugins": [
+    {
+      "name": "proxbase",
+      "source": "./plugins/proxbase",
+      "description": "Real Proxmox VE clusters as local QEMU/KVM VMs for testing: MCP server and skill"
+    }
+  ]
+}

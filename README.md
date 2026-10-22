@@ -42,7 +42,9 @@ pve3  running  online   10.10.10.13  https://127.0.0.1:18003  127.0.0.1:18103
   and a [GitHub Action](docs/ci.md) for CI that can cache a ready cluster as a
   template.
 - **For AI agents:** `proxbase mcp` is an [MCP server](docs/mcp.md): agents create
-  clusters, run commands on nodes, snapshot and inject faults through tools.
+  clusters, call the API, run commands on nodes, diagnose, reset to snapshots and
+  inject faults through tools. A [skill](docs/mcp.md#skill-and-plugin) teaches them
+  the workflow; in Claude Code: `/plugin install proxbase --marketplace virtbase/proxbase`.
 - **Fast:** `--golden` clones nodes from a cached base image: a 3-node cluster in
   under a minute (Ceph: 1.5 minutes), with a unique identity per node.
 - **Declarative:** one YAML file with a JSON schema; every flag overrides a field.
