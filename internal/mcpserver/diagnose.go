@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -32,7 +33,7 @@ type diagnoseOut struct {
 	Problem string          `json:"problem,omitempty"`
 	Status  *cluster.Status `json:"status"`
 	Nodes   []nodeReport    `json:"nodes"`
-	Logs    []string        `json:"logs" jsonschema:"log files on this host: QEMU, install and serial console of each node, the switch"`
+	Logs    []string        `json:"logs" jsonschema:"log files on this host: QEMU, install and serial console of each node, the switch; the result links them as resources"`
 }
 
 type nodeReport struct {
@@ -135,7 +136,12 @@ func (h *handlers) diagnose(ctx context.Context, req *mcp.CallToolRequest, in di
 		})
 	}
 	wg.Wait()
-	return nil, out, nil
+	// The JSON as text, as the SDK would send it, plus links to the host logs.
+	b, err := json.Marshal(out)
+	if err != nil {
+		return nil, out, err
+	}
+	return &mcp.CallToolResult{Content: append([]mcp.Content{&mcp.TextContent{Text: string(b)}}, logLinks(c.Cfg.Name, out.Logs)...)}, out, nil
 }
 
 // parseReport reads the output of diagnoseScript; tasks that ended before

@@ -4,6 +4,8 @@ package mcpserver
 
 import (
 	"context"
+	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"sync"
 	"time"
@@ -41,7 +43,14 @@ Typical flow:
 6. cluster_destroy deletes everything; it needs confirm set to the cluster name.
 
 Clusters persist across sessions; call cluster_list first to reuse one.
-The cluster file format is the resource ` + SchemaURI + `.`
+The cluster file format is the resource ` + SchemaURI + `. Resource templates serve a cluster's status
+(` + statusURI + `), its host logs (` + logURI + `) and the log of its background job (` + jobLogURI + `).`
+
+//go:embed icon.svg
+var iconSVG []byte
+
+// icons is the server's icon, a data URI so that clients need no network.
+var icons = []mcp.Icon{{Source: "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(iconSVG), MIMEType: "image/svg+xml", Sizes: []string{"any"}}}
 
 // Options configure the server.
 type Options struct {
@@ -105,10 +114,12 @@ func New(version string, log progress.Sink, opts Options) (*mcp.Server, error) {
 	if opts.ReadOnly {
 		text += readOnlyNote
 	}
-	s := mcp.NewServer(&mcp.Implementation{Name: "proxbase", Title: "Proxbase", Version: version},
-		&mcp.ServerOptions{Instructions: text})
+	s := mcp.NewServer(&mcp.Implementation{Name: "proxbase", Title: "Proxbase", Version: version, Icons: icons},
+		&mcp.ServerOptions{Instructions: text, CompletionHandler: complete})
 	h := &handlers{log: log, opts: opts, readOnly: map[string]bool{}}
 	h.register(s)
+	h.prompts(s)
+	h.resources(s)
 	if opts.AuditLog != "" {
 		s.AddReceivingMiddleware(auditMiddleware(opts.AuditLog, h.readOnly, log))
 	}

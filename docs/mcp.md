@@ -79,7 +79,7 @@ Clusters created in the container live in the `proxbase` volume; use
 | `cluster_wait` | Keep waiting for a create that is still running |
 | `cluster_start`, `cluster_stop` | Boot or shut down all nodes |
 | `cluster_ttl`, `cluster_gc` | Set a cluster's lifetime (`minutes`, 0: never); delete every expired cluster (`dryRun`) |
-| `cluster_destroy` | Delete a cluster; `confirm` must repeat the cluster name |
+| `cluster_destroy` | Delete a cluster; `confirm` must repeat the cluster name, or the client asks the user ([elicitation](#prompts-resources-and-elicitation)) |
 | `node_exec` | Run a command as root on a node; returns `stdout`, `stderr`, `exitCode` |
 | `file_put`, `file_get` | Write a file on a node (text or base64, up to 4 MiB, replaced atomically) or read one (`maxBytes`, default 256 KiB) |
 | `node_add`, `node_remove` | Grow or shrink a cluster as a [background job](#background-jobs); `node_remove` needs `confirm` set to the node name |
@@ -100,6 +100,32 @@ Clusters created in the container live in the `proxbase` volume; use
 The resource `https://proxbase.virtbase.com/schema/v1alpha1/cluster.json` is the JSON
 schema of cluster files. Tool annotations mark read-only and destructive tools, so
 clients can ask before `cluster_destroy`, `snapshot_restore`, `fault_apply` or `pve_call`.
+
+## Prompts, resources and elicitation
+
+Prompts are workflows that clients offer as slash commands (in Claude Code
+`/mcp__proxbase__test-loop`):
+
+| Prompt | Arguments | Does |
+| --- | --- | --- |
+| `test-loop` | `task`, `cluster`, `nodes` | Reuse or create a cluster with a baseline, test, diagnose failures, reset between runs |
+| `diagnose` | `cluster` | Find out why a cluster is unhealthy without changing it, and propose a fix |
+| `ha-failover` | `cluster` | Put a VM under HA, kill its node and report the recovery timeline |
+
+Resource templates serve what an agent may want to read in full:
+
+| URI | Content |
+| --- | --- |
+| `proxbase://clusters/{cluster}/status` | The status as `cluster_status` returns it (JSON) |
+| `proxbase://clusters/{cluster}/logs/{file}` | The end (256 KiB) of a host log: `<node>-console.log`, `<node>-install.log`, `<node>-qemu.log`, `switch.log` |
+| `proxbase://jobs/{cluster}/log` | The progress events of the latest background job (JSON lines) |
+
+`cluster_diagnose` links the host logs as resources, and prompt and resource
+arguments complete cluster, node and file names. Without `confirm`,
+`cluster_destroy` and `node_remove` ask the user to confirm if the client supports
+elicitation (clients of protocol 2026-07-28 get an input request and call again).
+Tools with large results (`node_exec`, `cluster_diagnose`, `pve_get`, `task_log`,
+`file_get`) set `anthropic/maxResultSizeChars` so Claude Code shows them inline.
 
 ## Skill and plugin
 

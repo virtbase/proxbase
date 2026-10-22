@@ -54,7 +54,7 @@ type stopIn struct {
 
 type destroyIn struct {
 	Cluster string `json:"cluster" jsonschema:"cluster name"`
-	Confirm string `json:"confirm" jsonschema:"must equal the cluster name; destroying deletes all disks and cannot be undone"`
+	Confirm string `json:"confirm,omitempty" jsonschema:"must equal the cluster name (destroying deletes all disks and cannot be undone); without it, clients that support elicitation ask the user"`
 }
 
 type execIn struct {
@@ -130,6 +130,8 @@ func (h *handlers) register(s *mcp.Server) {
 	local := func(destructive, idempotent bool) *mcp.ToolAnnotations {
 		return &mcp.ToolAnnotations{DestructiveHint: &destructive, IdempotentHint: idempotent, OpenWorldHint: ptr(false)}
 	}
+	// Claude Code shows results up to this many characters inline (default 50k).
+	bigResult := func(chars int) mcp.Meta { return mcp.Meta{"anthropic/maxResultSizeChars": chars} }
 
 	addTool(s, h, &mcp.Tool{Name: "cluster_list", Description: "List all proxbase clusters on this host with phase and running nodes.", Annotations: readOnly}, h.list)
 	addTool(s, h, &mcp.Tool{Name: "cluster_status", Description: "Show a cluster: phase, quorum, nodes (running/online, IP, web UI URL, SSH port), Ceph health, active faults, and the progress of a create running in the background. healthy=true means ready, quorate, all nodes online and Ceph HEALTH_OK.", Annotations: readOnly}, h.status)
@@ -139,22 +141,22 @@ func (h *handlers) register(s *mcp.Server) {
 	addTool(s, h, &mcp.Tool{Name: "cluster_start", Description: "Boot a stopped cluster and wait for quorum, the API and storage. Also boots nodes killed by fault_apply kill. If the call limit (50 s for clients that cancel tool calls after a minute) passes first, it returns healthy=false with what is pending while the nodes keep booting.", Annotations: local(false, true)}, h.start)
 	addTool(s, h, &mcp.Tool{Name: "cluster_stop", Description: "Shut all nodes of a cluster down (cleanly, then hard after the timeout). Disks are kept; cluster_start boots it again. Clears all faults.", Annotations: local(false, true)}, h.stop)
 	addTool(s, h, &mcp.Tool{Name: "cluster_reset", Description: resetDescription, Annotations: local(true, true)}, h.reset)
-	addTool(s, h, &mcp.Tool{Name: "cluster_diagnose", Description: diagnoseDescription, Annotations: readOnly}, h.diagnose)
+	addTool(s, h, &mcp.Tool{Name: "cluster_diagnose", Description: diagnoseDescription, Meta: bigResult(200000), Annotations: readOnly}, h.diagnose)
 	addTool(s, h, &mcp.Tool{Name: "cluster_env", Description: "Return what API and SSH clients need: API endpoint, API token (proxbase@pve!api, full privileges), the cluster CA certificate (PEM and path), SSH user, key path and ports per node. Root password only if includeRootPassword is set.", Annotations: readOnly}, h.env)
 	addTool(s, h, &mcp.Tool{Name: "cluster_ttl", Description: ttlDescription, Annotations: local(false, true)}, h.ttl)
 	addTool(s, h, &mcp.Tool{Name: "cluster_gc", Description: gcDescription, Annotations: local(true, true)}, h.gc)
 	addTool(s, h, &mcp.Tool{Name: "cluster_destroy", Description: "Delete a cluster: kill its VMs and remove all its disks, snapshots and credentials. Also stops a create running in the background. Set confirm to the cluster name.", Annotations: local(true, true)}, h.destroy)
 
-	addTool(s, h, &mcp.Tool{Name: "node_exec", Description: "Run a shell command as root on a running node over SSH and return stdout, stderr and the exit code. Use it for pvesh, qm, pct, pvecm, ceph and the like. Non-interactive; output is capped at 64 KiB per stream.", Annotations: local(true, false)}, h.exec)
+	addTool(s, h, &mcp.Tool{Name: "node_exec", Description: "Run a shell command as root on a running node over SSH and return stdout, stderr and the exit code. Use it for pvesh, qm, pct, pvecm, ceph and the like. Non-interactive; output is capped at 64 KiB per stream.", Meta: bigResult(200000), Annotations: local(true, false)}, h.exec)
 	addTool(s, h, &mcp.Tool{Name: "file_put", Description: filePutDescription, Annotations: local(true, true)}, h.filePut)
-	addTool(s, h, &mcp.Tool{Name: "file_get", Description: fileGetDescription, Annotations: readOnly}, h.fileGet)
+	addTool(s, h, &mcp.Tool{Name: "file_get", Description: fileGetDescription, Meta: bigResult(500000), Annotations: readOnly}, h.fileGet)
 	addTool(s, h, &mcp.Tool{Name: "node_add", Description: nodeAddDescription, Annotations: local(false, false)}, h.nodeAdd)
 	addTool(s, h, &mcp.Tool{Name: "node_remove", Description: nodeRemoveDescription, Annotations: local(true, false)}, h.nodeRemove)
 
-	addTool(s, h, &mcp.Tool{Name: "pve_get", Description: pveGetDescription, Annotations: readOnly}, h.pveGet)
+	addTool(s, h, &mcp.Tool{Name: "pve_get", Description: pveGetDescription, Meta: bigResult(500000), Annotations: readOnly}, h.pveGet)
 	addTool(s, h, &mcp.Tool{Name: "pve_call", Description: pveCallDescription, Annotations: local(true, false)}, h.pveCall)
 	addTool(s, h, &mcp.Tool{Name: "task_list", Description: taskListDescription, Annotations: readOnly}, h.taskList)
-	addTool(s, h, &mcp.Tool{Name: "task_log", Description: taskLogDescription, Annotations: readOnly}, h.taskLog)
+	addTool(s, h, &mcp.Tool{Name: "task_log", Description: taskLogDescription, Meta: bigResult(200000), Annotations: readOnly}, h.taskLog)
 	addTool(s, h, &mcp.Tool{Name: "task_wait", Description: taskWaitDescription, Annotations: readOnly}, h.taskWait)
 	addTool(s, h, &mcp.Tool{Name: "token_create", Description: tokenCreateDescription, Annotations: local(true, false)}, h.tokenCreate)
 	addTool(s, h, &mcp.Tool{Name: "token_list", Description: "List the scoped API tokens of a cluster with their role and path (without secrets).", Annotations: readOnly}, h.tokenList)
@@ -298,8 +300,17 @@ func (h *handlers) stop(ctx context.Context, req *mcp.CallToolRequest, in stopIn
 }
 
 func (h *handlers) destroy(ctx context.Context, req *mcp.CallToolRequest, in destroyIn) (*mcp.CallToolResult, messageOut, error) {
-	if in.Cluster == "" || in.Confirm != in.Cluster {
-		return nil, messageOut{}, errors.New("set confirm to the cluster name to destroy it")
+	if in.Cluster == "" {
+		return nil, messageOut{}, errors.New("set cluster and confirm to the cluster name to destroy it")
+	}
+	if in.Confirm != in.Cluster {
+		ok, ask := askUser(ctx, req, fmt.Sprintf("Destroy cluster %s? Its VMs, disks, snapshots and credentials are deleted; this cannot be undone.", in.Cluster))
+		if ask != nil {
+			return ask, messageOut{}, nil
+		}
+		if !ok {
+			return nil, messageOut{}, errors.New("set confirm to the cluster name to destroy it")
+		}
 	}
 	j, err := job.New(in.Cluster)
 	if err != nil {

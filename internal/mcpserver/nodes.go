@@ -30,7 +30,7 @@ type nodeAddIn struct {
 type nodeRemoveIn struct {
 	Cluster        string `json:"cluster,omitempty" jsonschema:"cluster name; default: the only cluster"`
 	Node           string `json:"node" jsonschema:"node to remove, e.g. pve3"`
-	Confirm        string `json:"confirm" jsonschema:"must equal the node name; removing deletes the node's disks"`
+	Confirm        string `json:"confirm,omitempty" jsonschema:"must equal the node name (removing deletes the node's disks); without it, clients that support elicitation ask the user"`
 	Force          bool   `json:"force,omitempty" jsonschema:"remove even with guests on the node or Ceph pools left degraded"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"return after this many seconds while the job keeps running (default 600, max 3600; at most 50 for clients that cancel tool calls after a minute)"`
 }
@@ -45,8 +45,17 @@ func (h *handlers) nodeAdd(ctx context.Context, req *mcp.CallToolRequest, in nod
 }
 
 func (h *handlers) nodeRemove(ctx context.Context, req *mcp.CallToolRequest, in nodeRemoveIn) (*mcp.CallToolResult, jobOut, error) {
-	if in.Node == "" || in.Confirm != in.Node {
-		return nil, jobOut{}, errors.New("set confirm to the node name to remove it")
+	if in.Node == "" {
+		return nil, jobOut{}, errors.New("set node, and confirm to the node name, to remove it")
+	}
+	if in.Confirm != in.Node {
+		ok, ask := askUser(ctx, req, fmt.Sprintf("Remove node %s from cluster %s? Its VM and disks are deleted.", in.Node, clusterName(in.Cluster)))
+		if ask != nil {
+			return ask, jobOut{}, nil
+		}
+		if !ok {
+			return nil, jobOut{}, errors.New("set confirm to the node name to remove it")
+		}
 	}
 	j, err := h.readyClusterJob(in.Cluster)
 	if err != nil {

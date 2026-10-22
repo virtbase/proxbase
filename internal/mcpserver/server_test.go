@@ -72,6 +72,13 @@ func connect(t *testing.T) (*mcp.ClientSession, *progressLog) {
 // connectAs connects a client with the given clientInfo name to a server with opts.
 func connectAs(t *testing.T, client string, opts Options) (*mcp.ClientSession, *progressLog) {
 	t.Helper()
+	return connectWith(t, client, opts, nil, nil)
+}
+
+// connectWith is connectAs with client and session options; the progress
+// handler of copts is replaced.
+func connectWith(t *testing.T, client string, opts Options, copts *mcp.ClientOptions, sopts *mcp.ClientSessionOptions) (*mcp.ClientSession, *progressLog) {
+	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	ctx := context.Background()
@@ -84,7 +91,11 @@ func connectAs(t *testing.T, client string, opts Options) (*mcp.ClientSession, *
 		t.Fatal(err)
 	}
 	p := &progressLog{}
-	cs, err := mcp.NewClient(&mcp.Implementation{Name: client}, &mcp.ClientOptions{ProgressNotificationHandler: p.add}).Connect(ctx, ct, nil)
+	if copts == nil {
+		copts = &mcp.ClientOptions{}
+	}
+	copts.ProgressNotificationHandler = p.add
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: client}, copts).Connect(ctx, ct, sopts)
 	if err != nil {
 		t.Fatal(err)
 	}

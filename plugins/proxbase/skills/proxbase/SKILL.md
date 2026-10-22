@@ -63,6 +63,7 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 5. **When something fails, diagnose before guessing.** `cluster_diagnose` returns,
    per node, quorum, failed units, failed tasks, errors of corosync, pmxcfs,
    pveproxy, pvedaemon, HA and Ceph, the clock offset and `ceph health detail`.
+   Host logs (serial consoles, installer) are resources `proxbase://clusters/<c>/logs/<file>`.
    Recent failed tasks: `task_list {"errorsOnly": true}`; a task's log: `task_log`;
    a task `pve_call` left running: `task_wait`.
 6. **Reset between iterations.** `cluster_reset` returns to `baseline` in seconds
