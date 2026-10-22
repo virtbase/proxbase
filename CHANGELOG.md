@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/virtbase/proxbase/compare/v0.3.0...v0.4.0) (2026-10-22)
+
+
+### Features
+
+* man pages, shell completions and AppStream metadata in packages ([#38](https://github.com/virtbase/proxbase/issues/38)) ([e75a820](https://github.com/virtbase/proxbase/commit/e75a8208df5e9fdd5761f045d579eed243b0ff9d))
+
 ## [0.3.0](https://github.com/virtbase/proxbase/compare/v0.2.2...v0.3.0) (2026-10-22)
 
 
