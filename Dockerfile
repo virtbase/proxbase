@@ -22,7 +22,8 @@ RUN apt-get update $APT_OPTS \
 # Runs as uid 1000; /dev/kvm access comes from the host (group_add the kvm GID).
 RUN useradd --uid 1000 --create-home proxbase && mkdir -p /data && chown proxbase:proxbase /data
 COPY --from=build /out/proxbase /usr/local/bin/proxbase
-ENV XDG_DATA_HOME=/data XDG_CACHE_HOME=/data/cache PROXBASE_BIND_ADDRESS=0.0.0.0
+ENV XDG_DATA_HOME=/data XDG_CACHE_HOME=/data/cache PROXBASE_BIND_ADDRESS=0.0.0.0 \
+    PROXBASE_INSTALL_METHOD=container
 USER proxbase
 VOLUME /data
 ENTRYPOINT ["tini", "--", "proxbase"]

@@ -107,7 +107,9 @@ Ceph Reef → Squid on 8.x: `reef` → `squid` in `ceph.list`, `ceph osd set noo
    workaround. Refuse versions below 8.4 with a clear error.
 2. **Pin the exact ISO** at the first create; record `pveVersion`, suite, Ceph release
    and kernel per node, shown by `status`.
-3. **`proxbase upgrade <cluster> --to 9`**: preflight (quorum, `pve8to9` on every node,
+3. **`proxbase pve-upgrade <cluster> --to 9`** (`proxbase upgrade` upgrades the CLI
+   itself, so the cluster upgrade needs its own name, matching `--pve-version` and
+   `pve8to9`): preflight (quorum, `pve8to9` on every node,
    latest 8.4, Ceph on Squid or `--ceph-first`), then node by node: migrate guests,
    repositories, non-interactive dist-upgrade, the fixes above, reboot, wait healthy.
    Per-node phase in the state, so a failed upgrade resumes. Progress like `create`.

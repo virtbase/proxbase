@@ -13,6 +13,7 @@ flowchart TD
     cli --> config
     cli --> network
     cli --> mcpserver["mcpserver<br/>MCP tools"]
+    cli --> selfupdate["selfupdate<br/>proxbase upgrade"]
     mcpserver --> cluster
     mcpserver --> job["job<br/>detached creates, node changes"]
     cli --> doctor["doctor<br/>host checks"]
@@ -70,6 +71,7 @@ flowchart TD
 | `job` | Runs a create or node change detached from its caller, with a JSON-lines progress log |
 | `doctor` | Host checks of `proxbase doctor` and the `host_check` tool |
 | `mcpserver` | MCP server (`proxbase mcp`): tools, the schema resource, progress forwarding |
+| `selfupdate` | `proxbase upgrade`: find a GitHub release, verify it (SHA-256, cosign), detect package-manager installs, replace the binary atomically |
 | `cli` | Commands, flags and output |
 
 Extension points are small interfaces: a new hypervisor implements `vm.Runtime` (and

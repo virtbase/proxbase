@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -19,7 +21,8 @@ import (
 	"github.com/virtbase/proxbase/internal/state"
 )
 
-// Set via -ldflags "-X github.com/virtbase/proxbase/internal/cli.version=...".
+// Set via -ldflags "-X github.com/virtbase/proxbase/internal/cli.version=...";
+// without it, Execute uses the module version of a go install build.
 var version = "dev"
 
 // sink receives progress and messages; --progress selects text or JSON lines.
@@ -29,6 +32,9 @@ var sink = progress.Text(os.Stderr)
 func Execute() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if bi, ok := debug.ReadBuildInfo(); ok && version == "dev" && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		version = bi.Main.Version
+	}
 	var format string
 	root := &cobra.Command{
 		Use:           "proxbase",
@@ -49,10 +55,14 @@ func Execute() int {
 	root.PersistentFlags().StringVar(&format, "progress", "text", "progress and messages on stderr: text or json (one JSON object per line)")
 	root.AddCommand(createCmd(), listCmd(), statusCmd(), startCmd(), stopCmd(), destroyCmd(),
 		upCmd(), nodeCmd(), snapshotCmd(), faultCmd(), imageCmd(), sshCmd(), consoleCmd(),
-		envCmd(), cpCmd(), doctorCmd(), configCmd(), versionCmd(), switchCmd(), mcpCmd())
+		envCmd(), cpCmd(), doctorCmd(), configCmd(), upgradeCmd(), versionCmd(), switchCmd(), mcpCmd())
 	t0 := time.Now()
 	err := root.ExecuteContext(ctx)
 	e := progress.Event{Time: time.Now(), Type: progress.TypeDone, Elapsed: time.Since(t0).Seconds()}
+	if code, ok := errors.AsType[exitCode](err); ok {
+		sink(e)
+		return int(code)
+	}
 	if err != nil {
 		e.Type, e.Error = progress.TypeError, err.Error()
 		if h, ok := errors.AsType[*hintError](err); ok {
@@ -65,6 +75,12 @@ func Execute() int {
 	}
 	return 0
 }
+
+// exitCode ends a command that did its job with a non-zero exit code and a done
+// event, e.g. upgrade --check when a newer release exists.
+type exitCode int
+
+func (c exitCode) Error() string { return "exit code " + strconv.Itoa(int(c)) }
 
 // hintError adds what to do next and where details are logged to an error.
 type hintError struct {

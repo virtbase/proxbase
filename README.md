@@ -85,6 +85,7 @@ proxbase env lab --format terraform                 # provider block for bpg/pro
 proxbase fault partition lab pve3                   # isolate a node, then: fault clear
 proxbase status lab --check                         # exit code for CI and health checks
 claude mcp add proxbase -- proxbase mcp             # let an AI agent drive proxbase
+proxbase upgrade                                    # install the latest release
 ```
 
 In GitHub Actions:
