@@ -196,7 +196,7 @@ server process, guarded by the same cluster lock as the CLI.
 ```text
 ~/.local/share/proxbase/clusters/<name>/
 ├── cluster.yaml        resolved configuration (source of truth)
-├── state.json          phase, nodes, ports, host keys, snapshots
+├── state.json          phase, nodes, ports, host keys, snapshots, owner, expiry
 ├── lock                flock for mutating commands
 ├── secrets/            root-password, id_ed25519(.pub), api-token, pve-root-ca.pem (0600)
 ├── disks/              <node>-root.qcow2, <node>-dataN.qcow2

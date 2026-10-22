@@ -1,9 +1,11 @@
 package mcpserver
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -34,6 +36,8 @@ type createIn struct {
 	PVEVersion     string `json:"pveVersion,omitempty" jsonschema:"Proxmox VE ISO version, e.g. 9.2 or 9.2-1 (default: newest supported)"`
 	Golden         *bool  `json:"golden,omitempty" jsonschema:"clone nodes from a cached installed base image instead of installing each (default true; the first create builds the image)"`
 	Snapshot       string `json:"snapshot,omitempty" jsonschema:"save a live snapshot with this name when the cluster is ready, e.g. baseline; cluster_reset returns to it in seconds"`
+	Owner          string `json:"owner,omitempty" jsonschema:"who owns the cluster, e.g. the agent and its task (default: the client's name)"`
+	TTLMinutes     int    `json:"ttlMinutes,omitempty" jsonschema:"lifetime: cluster_gc deletes the cluster this many minutes after the create (default: no expiry)"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty" jsonschema:"return after this many seconds while the create keeps running (default 600, max 3600; at most 50 for clients that cancel tool calls after a minute)"`
 }
 
@@ -71,7 +75,10 @@ func (h *handlers) create(ctx context.Context, req *mcp.CallToolRequest, in crea
 	if err != nil {
 		return nil, jobOut{}, err
 	}
-	args := []string{"create"}
+	args := []string{"create", "--owner", cmp.Or(in.Owner, clientName(req), "mcp")}
+	if in.TTLMinutes > 0 {
+		args = append(args, "--ttl", (time.Duration(in.TTLMinutes) * time.Minute).String())
+	}
 	if in.Snapshot != "" {
 		if err := cluster.CheckSnapshotName(in.Snapshot); err != nil {
 			return nil, jobOut{}, err

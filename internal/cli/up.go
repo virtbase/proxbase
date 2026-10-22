@@ -27,7 +27,7 @@ cleanly and exits. An existing cluster keeps its stored configuration.`,
 				return err
 			}
 			ctx := cmd.Context()
-			c, runErr := run(ctx, cfg.Name, func() (*cluster.Cluster, error) { return cluster.Create(ctx, cfg, sink) })
+			c, runErr := run(ctx, cfg.Name, func() (*cluster.Cluster, error) { return cluster.Create(ctx, cfg, sink, o.lease()) })
 			if c == nil {
 				return runErr
 			}

@@ -13,9 +13,19 @@ import (
 )
 
 type createOpts struct {
-	file, memory, disk, dataDisks, storage, version, output, bind, snapshot string
-	nodes, cpus                                                             int
-	dryRun, golden                                                          bool
+	file, memory, disk, dataDisks, storage, version, output, bind, snapshot, owner string
+	nodes, cpus                                                                    int
+	dryRun, golden                                                                 bool
+	ttl                                                                            time.Duration
+}
+
+// lease is the owner (by default the user) and lifetime the flags ask for.
+func (o *createOpts) lease() cluster.Lease {
+	owner := o.owner
+	if owner == "" {
+		owner = os.Getenv("USER")
+	}
+	return cluster.Lease{Owner: owner, TTL: o.ttl}
 }
 
 // saveBaseline saves the live snapshot name of a created cluster, unless name
@@ -64,7 +74,7 @@ func createCmd() *cobra.Command {
 					return err
 				}
 			}
-			c, err := cluster.Create(cmd.Context(), cfg, sink)
+			c, err := cluster.Create(cmd.Context(), cfg, sink, o.lease())
 			if err != nil {
 				return createError(c, err)
 			}
@@ -118,6 +128,8 @@ func (o *createOpts) addFlags(cmd *cobra.Command) {
 	f.StringVar(&o.version, "pve-version", "", "Proxmox VE ISO version, e.g. 9.2 or 9.2-1")
 	f.BoolVar(&o.golden, "golden", false, "clone nodes from a cached base image instead of installing each (faster)")
 	f.StringVar(&o.bind, "bind-address", "", "address for the UI/SSH forwards (default $PROXBASE_BIND_ADDRESS or 127.0.0.1)")
+	f.DurationVar(&o.ttl, "ttl", 0, "lifetime: proxbase gc deletes the cluster this long after the create (e.g. 2h; default: none)")
+	f.StringVar(&o.owner, "owner", "", "who owns the cluster, e.g. a user or an agent (default $USER)")
 }
 
 func (o *createOpts) resolve(cmd *cobra.Command, args []string) (*config.Cluster, error) {

@@ -19,8 +19,26 @@ import (
 	"github.com/virtbase/proxbase/internal/state"
 )
 
+// Lease is who owns a cluster and how long it may live.
+type Lease struct {
+	Owner string        // kept from the first create that sets one
+	TTL   time.Duration // from now; 0: no change
+}
+
+// apply records the lease in the state as of now.
+func (l Lease) apply(st *state.State, now time.Time) {
+	if st.Owner == "" {
+		st.Owner = l.Owner
+	}
+	if l.TTL > 0 {
+		t := now.Add(l.TTL).UTC()
+		st.ExpiresAt = &t
+	}
+}
+
 // Create builds a cluster, or resumes an unfinished create of the same name.
-func Create(ctx context.Context, cfg *config.Cluster, p progress.Sink) (*Cluster, error) {
+// The lease is recorded before anything else, so an abandoned create expires too.
+func Create(ctx context.Context, cfg *config.Cluster, p progress.Sink, lease Lease) (*Cluster, error) {
 	d := state.ForCluster(cfg.Name)
 	var c *Cluster
 	var err error
@@ -41,7 +59,11 @@ func Create(ctx context.Context, cfg *config.Cluster, p progress.Sink) (*Cluster
 	}
 	defer unlock()
 
+	lease.apply(c.St, time.Now())
 	c.St.Phase, c.St.Error = state.PhaseCreating, ""
+	if err := c.save(); err != nil {
+		return nil, err
+	}
 	if err := c.create(ctx); err != nil {
 		c.St.Phase, c.St.Error = state.PhaseFailed, err.Error()
 		_ = c.save()

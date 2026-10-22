@@ -115,6 +115,24 @@ proxbase env lab --export ./creds   # id_ed25519, pve-root-ca.pem, api-token, en
 
 `proxbase ssh` checks host keys against those recorded at create time.
 
+## Lifetime and cleanup
+
+Clusters stay until they are destroyed. To clean up forgotten ones, give them a
+lifetime and run `proxbase gc` from cron or a CI job:
+
+```bash
+proxbase create lab --ttl 4h --owner ci-pr-123   # expires 4 hours after the create
+proxbase ttl lab 2h                              # now + 2 hours; `none` removes it
+proxbase list                                    # OWNER and EXPIRES columns
+proxbase gc                                      # lists expired clusters
+proxbase gc --yes                                # destroys them
+```
+
+Expired clusters keep running until `gc` deletes them; clusters with a running
+create or node change are left for the next run. Over MCP, `cluster_create` takes
+`ttlMinutes` and `owner` (default: the client's name), and `cluster_ttl` and
+`cluster_gc` do the same as the commands.
+
 ## Destroy
 
 ```bash

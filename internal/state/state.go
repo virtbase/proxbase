@@ -34,7 +34,12 @@ type State struct {
 	Nodes     []*NodeState `json:"nodes"`
 	Snapshots []Snapshot   `json:"snapshots,omitempty"`
 	Faults    []Fault      `json:"faults,omitempty"`
+	Owner     string       `json:"owner,omitempty"`     // who created the cluster: a user or an agent
+	ExpiresAt *time.Time   `json:"expiresAt,omitempty"` // proxbase gc deletes the cluster after this
 }
+
+// Expired reports whether the cluster's lifetime ended before now.
+func (s *State) Expired(now time.Time) bool { return s.ExpiresAt != nil && now.After(*s.ExpiresAt) }
 
 // Fault is an injected node fault (network faults live with the switch).
 type Fault struct {

@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/virtbase/proxbase/internal/config"
 )
@@ -33,6 +34,22 @@ func TestLoadConfigPortBase(t *testing.T) {
 			}
 			if cfg.Access.PortBase != tt.want {
 				t.Errorf("port base %d, want %d", cfg.Access.PortBase, tt.want)
+			}
+		})
+	}
+}
+
+func TestExpired(t *testing.T) {
+	now := time.Now()
+	past, future := now.Add(-time.Minute), now.Add(time.Minute)
+	for _, tt := range []struct {
+		name    string
+		expires *time.Time
+		want    bool
+	}{{"never", nil, false}, {"past", &past, true}, {"future", &future, false}} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (&State{ExpiresAt: tt.expires}).Expired(now); got != tt.want {
+				t.Errorf("Expired = %v, want %v", got, tt.want)
 			}
 		})
 	}

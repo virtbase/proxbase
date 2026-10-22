@@ -29,6 +29,9 @@ type Status struct {
 	Ceph     string       `json:"ceph,omitempty"`
 	Duration string       `json:"createDuration,omitempty"`
 	Faults   []string     `json:"faults,omitempty"`
+	Owner    string       `json:"owner,omitempty"`
+	Expires  string       `json:"expiresAt,omitempty"` // RFC 3339
+	Expired  bool         `json:"expired,omitempty"`   // proxbase gc deletes it
 	Nodes    []NodeStatus `json:"nodes"`
 }
 
@@ -55,7 +58,11 @@ func (s *Status) Problem() string {
 // Status reports processes and, if reachable, membership and storage health via
 // the API token.
 func (c *Cluster) Status(ctx context.Context) *Status {
-	s := &Status{Name: c.Cfg.Name, Phase: string(c.St.Phase), Error: c.St.Error, ISO: c.St.ISO, Switch: c.net.Running(), Duration: c.St.Duration, Faults: c.Faults()}
+	s := &Status{Name: c.Cfg.Name, Phase: string(c.St.Phase), Error: c.St.Error, ISO: c.St.ISO, Switch: c.net.Running(),
+		Duration: c.St.Duration, Faults: c.Faults(), Owner: c.St.Owner, Expired: c.St.Expired(time.Now())}
+	if c.St.ExpiresAt != nil {
+		s.Expires = c.St.ExpiresAt.Format(time.RFC3339)
+	}
 	var api *pve.Client
 	for _, n := range c.Cfg.NodeList() {
 		ns := c.St.Node(n.Name)

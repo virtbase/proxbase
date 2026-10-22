@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"cmp"
 	"fmt"
 	"os"
 	"strings"
@@ -32,6 +33,9 @@ func printStatus(s *cluster.Status, output string) error {
 	fmt.Printf("Cluster %s: %s, quorate: %s, switch: %s\n", s.Name, s.Phase, quorate, map[bool]string{true: "running", false: "stopped"}[s.Switch])
 	if s.Ceph != "" {
 		fmt.Printf("Ceph: %s\n", s.Ceph)
+	}
+	if s.Owner != "" || s.Expires != "" {
+		fmt.Printf("Owner: %s, expires: %s\n", cmp.Or(s.Owner, "-"), expiry(s, time.Now()))
 	}
 	for _, f := range s.Faults {
 		fmt.Printf("Fault: %s\n", f)
@@ -66,11 +70,15 @@ func listCmd() *cobra.Command {
 				return err
 			}
 			type row struct {
-				Name    string `json:"name"`
-				Phase   string `json:"phase"`
-				Nodes   int    `json:"nodes"`
-				Running int    `json:"running"`
+				Name      string `json:"name"`
+				Phase     string `json:"phase"`
+				Nodes     int    `json:"nodes"`
+				Running   int    `json:"running"`
+				Owner     string `json:"owner,omitempty"`
+				ExpiresAt string `json:"expiresAt,omitempty"`
+				expires   string
 			}
+			now := time.Now()
 			rows := []row{}
 			for _, name := range names {
 				c, err := cluster.Open(name, sink)
@@ -79,7 +87,7 @@ func listCmd() *cobra.Command {
 					continue
 				}
 				s := c.Status(cmd.Context())
-				r := row{Name: name, Phase: s.Phase, Nodes: len(s.Nodes)}
+				r := row{Name: name, Phase: s.Phase, Nodes: len(s.Nodes), Owner: s.Owner, ExpiresAt: s.Expires, expires: expiry(s, now)}
 				for _, n := range s.Nodes {
 					if n.Running {
 						r.Running++
@@ -91,9 +99,9 @@ func listCmd() *cobra.Command {
 				return printJSON(rows)
 			}
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tPHASE\tNODES\tRUNNING")
+			fmt.Fprintln(w, "NAME\tPHASE\tNODES\tRUNNING\tOWNER\tEXPIRES")
 			for _, r := range rows {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%d\n", r.Name, r.Phase, r.Nodes, r.Running)
+				fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n", r.Name, r.Phase, r.Nodes, r.Running, cmp.Or(r.Owner, "-"), cmp.Or(r.expires, "-"))
 			}
 			return w.Flush()
 		},

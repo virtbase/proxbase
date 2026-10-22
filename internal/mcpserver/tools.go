@@ -26,11 +26,14 @@ type listOut struct {
 }
 
 type clusterSummary struct {
-	Name    string `json:"name"`
-	Phase   string `json:"phase"`
-	Nodes   int    `json:"nodes"`
-	Running int    `json:"running"`
-	Job     bool   `json:"jobRunning,omitempty" jsonschema:"a create or node change runs in the background"`
+	Name      string `json:"name"`
+	Phase     string `json:"phase"`
+	Nodes     int    `json:"nodes"`
+	Running   int    `json:"running"`
+	Owner     string `json:"owner,omitempty"`
+	ExpiresAt string `json:"expiresAt,omitempty" jsonschema:"RFC 3339; cluster_gc deletes the cluster after it"`
+	Expired   bool   `json:"expired,omitempty"`
+	Job       bool   `json:"jobRunning,omitempty" jsonschema:"a create or node change runs in the background"`
 }
 
 type statusOut struct {
@@ -134,6 +137,8 @@ func (h *handlers) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_wait", Description: "Wait for the background job of a cluster (after cluster_create, node_add or node_remove returned running=true), reporting its progress. Returns running=false with the status when it finished, or running=true again after timeoutSeconds.", Annotations: readOnly}, h.wait)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_start", Description: "Boot a stopped cluster and wait for quorum, the API and storage. Also boots nodes killed by fault_apply kill. If the call limit (50 s for clients that cancel tool calls after a minute) passes first, it returns healthy=false with what is pending while the nodes keep booting.", Annotations: local(false, true)}, h.start)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_stop", Description: "Shut all nodes of a cluster down (cleanly, then hard after the timeout). Disks are kept; cluster_start boots it again. Clears all faults.", Annotations: local(false, true)}, h.stop)
+	mcp.AddTool(s, &mcp.Tool{Name: "cluster_ttl", Description: ttlDescription, Annotations: local(false, true)}, h.ttl)
+	mcp.AddTool(s, &mcp.Tool{Name: "cluster_gc", Description: gcDescription, Annotations: local(true, true)}, h.gc)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_destroy", Description: "Delete a cluster: kill its VMs and remove all its disks, snapshots and credentials. Also stops a create running in the background. Set confirm to the cluster name.", Annotations: local(true, true)}, h.destroy)
 	mcp.AddTool(s, &mcp.Tool{Name: "node_exec", Description: "Run a shell command as root on a running node over SSH and return stdout, stderr and the exit code. Use it for pvesh, qm, pct, pvecm, ceph and the like. Non-interactive; output is capped at 64 KiB per stream.", Annotations: local(true, false)}, h.exec)
 	mcp.AddTool(s, &mcp.Tool{Name: "cluster_diagnose", Description: diagnoseDescription, Annotations: readOnly}, h.diagnose)
@@ -173,7 +178,7 @@ func (h *handlers) list(ctx context.Context, _ *mcp.CallToolRequest, _ struct{})
 			continue
 		}
 		s := c.Status(ctx)
-		r := clusterSummary{Name: name, Phase: s.Phase, Nodes: len(s.Nodes)}
+		r := clusterSummary{Name: name, Phase: s.Phase, Nodes: len(s.Nodes), Owner: s.Owner, ExpiresAt: s.Expires, Expired: s.Expired}
 		if j, err := job.New(name); err == nil {
 			r.Job = j.PID() != 0
 		}

@@ -13,11 +13,13 @@ stderr are JSON lines, ending with a `done` or `error` event (see
 | --- | --- |
 | `create [name]` | Create a cluster from a file and/or flags; re-run to resume a failed create |
 | `up [name]` | Create, resume or start a cluster and run in the foreground; stop it on SIGTERM/SIGINT |
-| `list` | List clusters (`-o json`) |
+| `list` | List clusters with owner and expiry (`-o json`) |
 | `status [name]` | Nodes, quorum, Ceph health and ports (`-o json`, `--check`) |
 | `start [name]` | Start a stopped cluster and wait for quorum and storage |
 | `stop [name]` | Shut down all nodes (`--timeout`, default 3m; `0` = hard) |
 | `destroy [name]` | Kill the VMs and remove all files (`--yes`) |
+| `ttl [name] <duration\|none>` | Expire the cluster that long from now (e.g. `2h`), or never |
+| `gc` | List expired clusters; `--yes` destroys them (not those with a running job) |
 
 Flags of `create` and `up` (they override fields of the file, see
 [configuration](configuration.md#flags)):
@@ -34,6 +36,8 @@ Flags of `create` and `up` (they override fields of the file, see
 | `--bind-address` | Address of the UI/SSH forwards (default `$PROXBASE_BIND_ADDRESS` or `127.0.0.1`) |
 | `--dry-run` | `create` only: print the resolved file with the port base it would take (`-o yaml\|json`) and log the plan: ports, memory, disk, capacity warnings |
 | `--snapshot` | `create` only: save a live snapshot with this name when the cluster is ready (kept if it exists) |
+| `--ttl` | Lifetime from the create, e.g. `2h`: `proxbase gc` deletes the cluster afterwards (default: none) |
+| `--owner` | Who owns the cluster, e.g. an agent and its task (default `$USER`); kept from the first create |
 | `-o, --output` | `create` only: `table` or `json` |
 | `--stop-timeout` | `up` only: clean shutdown time on SIGTERM (default 2m) |
 

@@ -17,10 +17,13 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 ## The loop
 
 1. **Reuse first.** `cluster_list`. Use a ready cluster of the right shape if it is
-   yours to use. Name new clusters after the task or worktree (lowercase letters,
-   digits and dashes, at most 15 characters), not `default`.
+   yours to use (`owner` says who created it). Name new clusters after the task or
+   worktree (lowercase letters, digits and dashes, at most 15 characters), not
+   `default`.
 2. **Create with a baseline.**
-   `cluster_create {"name": "tf-vm", "nodes": 1, "snapshot": "baseline"}`.
+   `cluster_create {"name": "tf-vm", "nodes": 1, "snapshot": "baseline", "ttlMinutes": 240}`.
+   The lifetime lets `cluster_gc` clean up the cluster if nobody destroys it;
+   extend it with `cluster_ttl` while you still need it.
    If the result has `running: true`, call `cluster_wait` until `running: false`.
    The first create on a host downloads the ISO and builds a base image (10-20
    minutes); later creates take under a minute (Ceph about 1.5 minutes).
@@ -94,7 +97,7 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 | --- | --- |
 | `cluster_list`, `cluster_status` | `proxbase list`, `proxbase status <c> [-o json] [--check]` |
 | `cluster_plan` | `proxbase create <c> --nodes 3 --dry-run` |
-| `cluster_create` + `cluster_wait` | `proxbase create <c> --nodes 3 --golden --snapshot baseline` (blocks) |
+| `cluster_create` + `cluster_wait` | `proxbase create <c> --nodes 3 --golden --snapshot baseline --ttl 4h` (blocks) |
 | `cluster_env` | `proxbase env <c> [--format shell\|json\|terraform]` |
 | `node_exec` | `proxbase ssh <c> <node> -- <command>` |
 | `file_put`, `file_get` | `proxbase cp <file> <c>:<node>:/path`, `proxbase cp <c>:<node>:/path <file>` |
@@ -105,3 +108,4 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*
 | `snapshot_*` | `proxbase snapshot save\|restore\|delete\|list <c> [<name>] [--live]` |
 | `fault_apply`, `fault_clear` | `proxbase fault kill\|freeze\|thaw\|link\|partition\|degrade\|clear <c> …` |
 | `cluster_destroy` | `proxbase destroy <c> --yes` |
+| `cluster_ttl`, `cluster_gc` | `proxbase ttl <c> 2h`, `proxbase gc --yes` |

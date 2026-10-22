@@ -115,6 +115,14 @@ type handlers struct {
 	callTimeout time.Duration // Options.CallTimeout
 }
 
+// clientName is the name the MCP client gave, if any.
+func clientName(req *mcp.CallToolRequest) string {
+	if c := req.ClientInfo(); c != nil {
+		return c.Name
+	}
+	return ""
+}
+
 // limit is how long the call req may block; 0 means no limit.
 func (h *handlers) limit(req *mcp.CallToolRequest) time.Duration {
 	return callLimit(h.callTimeout, req.ClientInfo())
