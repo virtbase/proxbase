@@ -4,8 +4,59 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
+
+// TaskStatus is the state of a task.
+type TaskStatus struct {
+	Status     string `json:"status"` // "running" or "stopped"
+	ExitStatus string `json:"exitstatus,omitempty"`
+}
+
+// Stopped reports whether the task has ended.
+func (s TaskStatus) Stopped() bool { return s.Status == "stopped" }
+
+// OK reports whether a stopped task succeeded, possibly with warnings.
+func (s TaskStatus) OK() bool {
+	return s.ExitStatus == "OK" || strings.HasPrefix(s.ExitStatus, "WARNINGS")
+}
+
+// TaskNode returns the node that runs the task upid ("UPID:node:pid:...").
+func TaskNode(upid string) (string, bool) {
+	f := strings.SplitN(upid, ":", 3)
+	if len(f) < 3 || f[0] != "UPID" || f[1] == "" {
+		return "", false
+	}
+	return f[1], true
+}
+
+func taskPath(node, upid string) string {
+	return "/nodes/" + url.PathEscape(node) + "/tasks/" + url.PathEscape(upid)
+}
+
+// TaskStatus returns the state of a task.
+func (c *Client) TaskStatus(ctx context.Context, node, upid string) (TaskStatus, error) {
+	var st TaskStatus
+	err := c.Get(ctx, taskPath(node, upid)+"/status", &st)
+	return st, err
+}
+
+// TaskLog returns the first limit lines of a task's log.
+func (c *Client) TaskLog(ctx context.Context, node, upid string, limit int) ([]string, error) {
+	var lines []struct {
+		T string `json:"t"`
+	}
+	if err := c.Get(ctx, taskPath(node, upid)+"/log?limit="+strconv.Itoa(limit), &lines); err != nil {
+		return nil, err
+	}
+	log := make([]string, len(lines))
+	for i, l := range lines {
+		log[i] = l.T
+	}
+	return log, nil
+}
 
 // PostTask POSTs and waits for the task if the call started one.
 func (c *Client) PostTask(ctx context.Context, node, path string, form url.Values, timeout time.Duration) error {

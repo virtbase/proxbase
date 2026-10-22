@@ -164,7 +164,7 @@ func TestTools(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	for _, want := range []string{"cluster_list", "cluster_status", "cluster_create", "cluster_wait", "cluster_start", "cluster_stop",
-		"cluster_destroy", "node_exec", "cluster_env", "snapshot_save", "snapshot_restore", "snapshot_list", "fault_apply", "fault_clear", "config_validate"} {
+		"cluster_destroy", "node_exec", "pve_get", "pve_call", "cluster_env", "snapshot_save", "snapshot_restore", "snapshot_list", "fault_apply", "fault_clear", "config_validate"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("tool %s missing (have %v)", want, names)
 		}

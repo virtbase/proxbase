@@ -174,6 +174,31 @@ func (c *Cluster) tokenClient(port int) *pve.Client {
 	return cl
 }
 
+// TokenAPI returns an API client for node that uses the API token. Without
+// node it picks the first running node.
+func (c *Cluster) TokenAPI(node string) (*pve.Client, error) {
+	if node == "" {
+		for _, n := range c.Cfg.NodeList() {
+			if c.running(n) {
+				node = n.Name
+				break
+			}
+		}
+		if node == "" {
+			return nil, fmt.Errorf("cluster %s has no running node; start it first", c.Cfg.Name)
+		}
+	}
+	ns := c.St.Node(node)
+	if ns == nil {
+		return nil, fmt.Errorf("cluster %s has no node %q", c.Cfg.Name, node)
+	}
+	cl := c.tokenClient(ns.UIPort)
+	if cl == nil {
+		return nil, fmt.Errorf("cluster %s has no API token yet (create not finished or access.apiToken: false)", c.Cfg.Name)
+	}
+	return cl, nil
+}
+
 // host gives storage backends access to the cluster.
 type host struct{ c *Cluster }
 

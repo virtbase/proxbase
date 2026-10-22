@@ -27,8 +27,10 @@ Typical flow:
    base image (10-20 minutes); later creates clone it (a few minutes). If it returns with
    running=true, call cluster_wait until running=false.
 2. cluster_status: healthy=true means ready, quorate, all nodes online, Ceph HEALTH_OK.
-3. node_exec runs shell commands as root on a node (e.g. pvesh, qm, pct, ceph).
-   cluster_env returns the API endpoint, token and CA certificate for API clients.
+3. pve_get and pve_call use the Proxmox VE API with the cluster's token (no shell quoting);
+   pve_call waits for the task it starts. node_exec runs shell commands as root on a node
+   (e.g. qm, pct, ceph, journalctl). cluster_env returns the API endpoint, token and CA
+   certificate for your own API clients.
 4. To reset quickly between tests: cluster_stop, snapshot_save once, then snapshot_restore + cluster_start.
 5. fault_apply/fault_clear inject failures (power loss, hangs, cable pulls, partitions, latency).
 6. cluster_destroy deletes everything; it needs confirm set to the cluster name.

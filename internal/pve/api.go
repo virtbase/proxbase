@@ -225,25 +225,18 @@ func (c *Client) do(ctx context.Context, method, path string, form url.Values, o
 
 // TaskDone reports whether a task has stopped and, if it failed, its error with the log tail.
 func (c *Client) TaskDone(ctx context.Context, node, upid string) (bool, error) {
-	var st struct {
-		Status     string `json:"status"`
-		ExitStatus string `json:"exitstatus"`
-	}
-	if err := c.Get(ctx, "/nodes/"+node+"/tasks/"+url.PathEscape(upid)+"/status", &st); err != nil || st.Status != "stopped" {
+	st, err := c.TaskStatus(ctx, node, upid)
+	if err != nil || !st.Stopped() {
 		return false, nil
 	}
-	if st.ExitStatus == "OK" || strings.HasPrefix(st.ExitStatus, "WARNINGS") {
+	if st.OK() {
 		return true, nil
 	}
-	var lines []struct {
-		T string `json:"t"`
+	lines, _ := c.TaskLog(ctx, node, upid, 20)
+	for i, l := range lines {
+		lines[i] = "  " + l
 	}
-	_ = c.Get(ctx, "/nodes/"+node+"/tasks/"+url.PathEscape(upid)+"/log?limit=20", &lines)
-	var log []string
-	for _, l := range lines {
-		log = append(log, "  "+l.T)
-	}
-	return true, fmt.Errorf("task failed: %s\n%s", st.ExitStatus, strings.Join(log, "\n"))
+	return true, fmt.Errorf("task failed: %s\n%s", st.ExitStatus, strings.Join(lines, "\n"))
 }
 
 // WaitTask waits for a UPID to finish and returns an error unless it ended OK.
@@ -251,13 +244,9 @@ func (c *Client) WaitTask(ctx context.Context, node, upid string, timeout time.D
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	for {
-		var st struct {
-			Status     string `json:"status"`
-			ExitStatus string `json:"exitstatus"`
-		}
-		err := c.Get(ctx, "/nodes/"+node+"/tasks/"+url.PathEscape(upid)+"/status", &st)
-		if err == nil && st.Status == "stopped" {
-			if st.ExitStatus != "OK" && !strings.HasPrefix(st.ExitStatus, "WARNINGS") {
+		st, err := c.TaskStatus(ctx, node, upid)
+		if err == nil && st.Stopped() {
+			if !st.OK() {
 				return fmt.Errorf("task %s failed: %s", upid, st.ExitStatus)
 			}
 			return nil

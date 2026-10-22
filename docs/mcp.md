@@ -72,6 +72,8 @@ Clusters created in the container live in the `proxbase` volume; use
 | `cluster_start`, `cluster_stop` | Boot or shut down all nodes |
 | `cluster_destroy` | Delete a cluster; `confirm` must repeat the cluster name |
 | `node_exec` | Run a command as root on a node; returns `stdout`, `stderr`, `exitCode` |
+| `pve_get` | Read from the Proxmox VE API with the cluster's token: `path` (e.g. `/cluster/resources`), `params`; returns the response data |
+| `pve_call` | POST, PUT or DELETE through the API; waits for the task it starts and returns its exit status and log, a failed task is an error |
 | `cluster_env` | API endpoint, token, CA certificate, SSH key and ports; root password only with `includeRootPassword` |
 | `snapshot_save`, `snapshot_restore`, `snapshot_delete`, `snapshot_list` | Snapshots of the stopped cluster, or with `live` of the running cluster including memory (restoring resumes it) |
 | `fault_apply`, `fault_clear` | kill, freeze, thaw, link-down/up, partition, degrade |
@@ -79,7 +81,7 @@ Clusters created in the container live in the `proxbase` volume; use
 
 The resource `https://proxbase.virtbase.com/schema/v1alpha1/cluster.json` is the JSON
 schema of cluster files. Tool annotations mark read-only and destructive tools, so
-clients can ask before `cluster_destroy`, `snapshot_restore` or `fault_apply`.
+clients can ask before `cluster_destroy`, `snapshot_restore`, `fault_apply` or `pve_call`.
 
 ## Long-running creates
 
@@ -142,6 +144,10 @@ agent → cluster_create {"name": "lab", "nodes": 3, "storage": "ceph"}
       ← {"running": false, "status": {"phase": "ready", "quorate": true, …}}
 agent → node_exec {"cluster": "lab", "node": "pve2", "command": "ceph -s"}
       ← {"stdout": "  cluster:\n    id: …\n    health: HEALTH_OK …", "exitCode": 0}
+agent → pve_call {"cluster": "lab", "method": "POST", "path": "/pools", "params": {"poolid": "ci"}}
+      ← {"data": null}
+agent → pve_get {"cluster": "lab", "path": "/cluster/resources", "params": {"type": "node"}}
+      ← {"data": [{"node": "pve1", "status": "online", …}, …]}
 agent → fault_apply {"cluster": "lab", "kind": "partition", "groups": [["pve3"]]}
 agent → cluster_status {"cluster": "lab"}
       ← {"healthy": false, "problem": "pve3 not running or offline", …}
