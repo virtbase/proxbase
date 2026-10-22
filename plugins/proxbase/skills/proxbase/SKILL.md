@@ -9,7 +9,7 @@ Proxbase runs real Proxmox VE clusters on this host: every node is a QEMU/KVM VM
 installed from the stock ISO, joined into a cluster, with ZFS or Ceph storage and an
 API token. Use them as disposable test targets.
 
-The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`,
+The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`, `task_*`,
 `snapshot_*`, `fault_*`) do everything below. Without them, use the CLI (see the end).
 `proxbase doctor` checks the host: KVM, QEMU, memory, ports. Each node needs about
 4 GiB of RAM, 6 GiB with Ceph.
@@ -57,7 +57,8 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`,
 5. **When something fails, diagnose before guessing.** `cluster_diagnose` returns,
    per node, quorum, failed units, failed tasks, errors of corosync, pmxcfs,
    pveproxy, pvedaemon, HA and Ceph, the clock offset and `ceph health detail`.
-   A task's log: `pve_get /nodes/<node>/tasks/<upid>/log`.
+   Recent failed tasks: `task_list {"errorsOnly": true}`; a task's log: `task_log`;
+   a task `pve_call` left running: `task_wait`.
 6. **Reset between iterations.** `cluster_reset` returns to `baseline` in seconds
    (a live snapshot resumes with its memory). Do not clean up by hand or create a
    new cluster for each run. Save more snapshots with
@@ -96,6 +97,7 @@ The proxbase MCP tools (`cluster_*`, `node_exec`, `pve_get`, `pve_call`,
 | `cluster_env` | `proxbase env <c> [--format shell\|json\|terraform]` |
 | `node_exec` | `proxbase ssh <c> <node> -- <command>` |
 | `pve_get`, `pve_call` | `proxbase ssh <c> -- pvesh get <path> --output-format json` |
+| `task_list`, `task_log` | `proxbase ssh <c> -- pvesh get /nodes/<node>/tasks` (`…/tasks/<upid>/log`) |
 | `cluster_reset` | `proxbase stop <c> --timeout 0 && proxbase snapshot restore <c> baseline` (live snapshots resume; disk snapshots need `proxbase start <c>`) |
 | `snapshot_*` | `proxbase snapshot save\|restore\|delete\|list <c> [<name>] [--live]` |
 | `fault_apply`, `fault_clear` | `proxbase fault kill\|freeze\|thaw\|link\|partition\|degrade\|clear <c> …` |

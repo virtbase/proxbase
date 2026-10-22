@@ -81,6 +81,9 @@ Clusters created in the container live in the `proxbase` volume; use
 | `node_exec` | Run a command as root on a node; returns `stdout`, `stderr`, `exitCode` |
 | `pve_get` | Read from the Proxmox VE API with the cluster's token: `path` (e.g. `/cluster/resources`), `params`; returns the response data |
 | `pve_call` | POST, PUT or DELETE through the API; waits for the task it starts and returns its exit status and log, a failed task is an error |
+| `task_list` | Proxmox VE tasks of every node or one, newest first; filters `errorsOnly`, `running`, `type`, `vmid`, `sinceMinutes` |
+| `task_log` | Status and the last `lines` of a task's log, by UPID |
+| `task_wait` | Wait for a task to end; returns its exit status and log, a failed task is an error |
 | `cluster_env` | API endpoint, token, CA certificate, SSH key and ports; root password only with `includeRootPassword` |
 | `snapshot_save`, `snapshot_restore`, `snapshot_delete`, `snapshot_list` | Snapshots of the stopped cluster, or with `live` of the running cluster including memory (restoring resumes it) |
 | `cluster_reset` | Back to a snapshot (default `baseline`) in one call: power off, restore, start or resume; returns the status |

@@ -58,7 +58,7 @@ func fakePVE(t *testing.T) *pve.Client {
 		case task == upidFail+"/status":
 			fmt.Fprint(w, `{"data":{"status":"stopped","exitstatus":"start failed: boom"}}`)
 		case strings.HasSuffix(task, "/log"):
-			fmt.Fprint(w, `{"data":[{"n":1,"t":"first line"},{"n":2,"t":"last line"}]}`)
+			fmt.Fprint(w, `{"data":[{"n":1,"t":"first line"},{"n":2,"t":"last line"}],"total":2}`)
 		case r.Method == http.MethodDelete && r.URL.Path == "/api2/json/pools/lab":
 			fmt.Fprint(w, `{"data":null}`)
 		default:

@@ -191,8 +191,8 @@ func waitTask(ctx context.Context, api *pve.Client, node, upid string, deadline 
 	out := &taskOut{UPID: upid, Node: node, Status: st.Status, ExitStatus: st.ExitStatus}
 	lctx, cancel := context.WithTimeout(ctx, taskPollTimeout)
 	defer cancel()
-	if log, err := api.TaskLog(lctx, node, upid, 1000); err == nil {
-		out.Log = log[max(0, len(log)-taskLogLines):]
+	if log, _, err := api.TaskLogTail(lctx, node, upid, taskLogLines); err == nil {
+		out.Log = log
 	}
 	if st.Stopped() && !st.OK() {
 		return nil, fmt.Errorf("task %s failed: %s\n%s", upid, st.ExitStatus, strings.Join(out.Log, "\n"))

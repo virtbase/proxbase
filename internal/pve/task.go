@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -43,19 +44,82 @@ func (c *Client) TaskStatus(ctx context.Context, node, upid string) (TaskStatus,
 	return st, err
 }
 
-// TaskLog returns the first limit lines of a task's log.
-func (c *Client) TaskLog(ctx context.Context, node, upid string, limit int) ([]string, error) {
+// TaskLogTail returns the last n lines of a task's log and how many it has.
+func (c *Client) TaskLogTail(ctx context.Context, node, upid string, n int) ([]string, int, error) {
+	var probe []json.RawMessage
+	total, err := c.GetPage(ctx, taskPath(node, upid)+"/log?limit=1", &probe)
+	if err != nil {
+		return nil, 0, err
+	}
 	var lines []struct {
 		T string `json:"t"`
 	}
-	if err := c.Get(ctx, taskPath(node, upid)+"/log?limit="+strconv.Itoa(limit), &lines); err != nil {
-		return nil, err
+	q := url.Values{"start": {strconv.Itoa(max(0, total-n))}, "limit": {strconv.Itoa(n)}}
+	if _, err := c.GetPage(ctx, taskPath(node, upid)+"/log?"+q.Encode(), &lines); err != nil {
+		return nil, 0, err
 	}
 	log := make([]string, len(lines))
 	for i, l := range lines {
 		log[i] = l.T
 	}
-	return log, nil
+	return log, total, nil
+}
+
+// Task is an entry of a node's task list.
+type Task struct {
+	UPID      string `json:"upid"`
+	Node      string `json:"node"`
+	Type      string `json:"type"`
+	ID        string `json:"id"`
+	User      string `json:"user"`
+	Status    string `json:"status"` // exit status once ended; "RUNNING" or empty before
+	StartTime int64  `json:"starttime"`
+	EndTime   int64  `json:"endtime"`
+}
+
+// Running reports whether the task has not ended yet.
+func (t Task) Running() bool { return t.EndTime == 0 }
+
+// Failed reports whether the task ended without success.
+func (t Task) Failed() bool {
+	return !t.Running() && !TaskStatus{Status: "stopped", ExitStatus: t.Status}.OK()
+}
+
+// TaskFilter selects tasks of a node.
+type TaskFilter struct {
+	Limit   int       // most tasks to return
+	Errors  bool      // only tasks that failed
+	Running bool      // only tasks that are still running
+	Type    string    // only this type, e.g. qmstart
+	VMID    int       // only tasks of this guest
+	Since   time.Time // only tasks started since then
+}
+
+// Tasks returns the tasks of a node, newest first, from its archive and the
+// running ones.
+func (c *Client) Tasks(ctx context.Context, node string, f TaskFilter) ([]Task, error) {
+	q := url.Values{"source": {"all"}}
+	if f.Running {
+		q.Set("source", "active")
+	}
+	if f.Limit > 0 {
+		q.Set("limit", strconv.Itoa(f.Limit))
+	}
+	if f.Errors {
+		q.Set("errors", "1")
+	}
+	if f.Type != "" {
+		q.Set("typefilter", f.Type)
+	}
+	if f.VMID > 0 {
+		q.Set("vmid", strconv.Itoa(f.VMID))
+	}
+	if !f.Since.IsZero() {
+		q.Set("since", strconv.FormatInt(f.Since.Unix(), 10))
+	}
+	var tasks []Task
+	err := c.Get(ctx, "/nodes/"+url.PathEscape(node)+"/tasks?"+q.Encode(), &tasks)
+	return tasks, err
 }
 
 // PostTask POSTs and waits for the task if the call started one.

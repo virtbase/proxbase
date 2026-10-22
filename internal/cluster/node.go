@@ -47,6 +47,16 @@ func (c *Cluster) spec(n config.Node) vm.Spec {
 
 func (c *Cluster) running(n config.Node) bool { return c.runtime.Running(c.spec(n)) }
 
+// NodeRunning reports whether the VM of the node name is running.
+func (c *Cluster) NodeRunning(name string) bool {
+	for _, n := range c.Cfg.NodeList() {
+		if n.Name == name {
+			return c.running(n)
+		}
+	}
+	return false
+}
+
 func nodeIP(n config.Node, net config.Network) string {
 	ip, _, _ := config.NodeIP(net.CIDR, n.Index)
 	return ip.String()
