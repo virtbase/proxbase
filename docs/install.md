@@ -22,8 +22,8 @@ From source: `go install github.com/virtbase/proxbase/cmd/proxbase@latest`
 
 ## Container image
 
-`ghcr.io/virtbase/proxbase:<version>` (linux/amd64; an arm64 image may follow); see the Docker section
-of the [README](../README.md#docker) and [examples/compose](../examples/compose).
+`ghcr.io/virtbase/proxbase:<version>` (linux/amd64; an arm64 image may follow); see
+[Docker](docker.md) and [examples/compose](../examples/compose).
 
 ## Upgrading
 
