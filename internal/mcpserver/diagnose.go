@@ -104,11 +104,17 @@ func (h *handlers) diagnose(ctx context.Context, req *mcp.CallToolRequest, in di
 	if since == 0 {
 		since = 30 * time.Minute
 	}
+	if limit := h.limit(req); limit > 0 {
+		// The status and then the nodes share the call limit.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, limit)
+		defer cancel()
+	}
 	s := c.Status(ctx)
 	out := diagnoseOut{Status: s, Problem: s.Problem(), Logs: hostLogs(c), Nodes: make([]nodeReport, len(s.Nodes))}
 	out.Healthy = out.Problem == ""
 
-	nctx, cancel := context.WithTimeout(ctx, within(beforeStatus(h.limit(req)), diagnoseTimeout))
+	nctx, cancel := context.WithTimeout(ctx, diagnoseTimeout)
 	defer cancel()
 	ceph := c.Cfg.CephEnabled()
 	var wg sync.WaitGroup
