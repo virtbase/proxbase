@@ -103,7 +103,7 @@ func (s *SSH) Exec(ctx context.Context, command string) (ExecResult, error) {
 		// Best effort: closing the session ends Run even if the signal is not supported.
 		_ = sess.Signal(ssh.SIGKILL)
 		_ = sess.Close()
-		<-done
+		<-done //nolint:errcheck // killed, the error is superseded by ctx.Err()
 		return ExecResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1}, ctx.Err()
 	}
 	r := ExecResult{Stdout: stdout.String(), Stderr: stderr.String()}

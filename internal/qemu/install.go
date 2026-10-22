@@ -89,7 +89,7 @@ func (Runtime) Install(ctx context.Context, s vm.Spec, m vm.Media) error {
 	go func() { exited <- cmd.Wait() }()
 	if err := serial.Drive(ctx, serialSock(s), installLog(s), installTimeout); err != nil {
 		_ = cmd.Process.Kill()
-		<-exited
+		<-exited //nolint:errcheck // killed, the exit error is expected
 		if b, _ := os.ReadFile(qemuLog(s)); len(b) > 0 {
 			return fmt.Errorf("%w\nQEMU: %s", err, strings.TrimSpace(string(b)))
 		}
@@ -102,7 +102,7 @@ func (Runtime) Install(ctx context.Context, s vm.Spec, m vm.Media) error {
 		}
 	case <-time.After(30 * time.Second):
 		_ = cmd.Process.Kill()
-		<-exited
+		<-exited //nolint:errcheck // killed, the exit error is expected
 		return errors.New("QEMU did not exit after the installation")
 	}
 	_ = os.Remove(serialSock(s))

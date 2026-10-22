@@ -44,7 +44,13 @@ func TestSwitch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error)
 	go func() { done <- sw.Serve(ctx) }()
-	defer func() { cancel(); <-done; sw.Close() }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+		sw.Close()
+	}()
 
 	remote := &net.UnixAddr{Name: swPath, Net: "unixgram"}
 	peers := make([]*peer, 3)
@@ -130,7 +136,13 @@ func TestPolicy(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error)
 	go func() { done <- sw.Serve(ctx) }()
-	defer func() { cancel(); <-done; _ = sw.Close() }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+		_ = sw.Close()
+	}()
 	remote := &net.UnixAddr{Name: swPath, Net: "unixgram"}
 	peers := make([]*peer, 3)
 	for i, p := range paths {
