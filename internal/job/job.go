@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/virtbase/proxbase/internal/config"
 	"github.com/virtbase/proxbase/internal/progress"
@@ -86,6 +87,7 @@ func (j Job) Start(args ...string) (exited <-chan struct{}, err error) {
 	if err := state.WriteFileAtomic(j.pidFile(), []byte(strconv.Itoa(cmd.Process.Pid)), 0o644); err != nil {
 		_ = cmd.Process.Kill()
 	}
+	waitVisible(cmd.Process.Pid)
 	done := make(chan struct{})
 	go func() {
 		_ = cmd.Wait() // reap, so PID does not see a zombie
@@ -115,10 +117,28 @@ func (j Job) PID() int {
 		return 0
 	}
 	// Guard against PID reuse where /proc exists.
-	if cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil && !bytes.Contains(cmdline, []byte("--progress\x00json")) {
+	if cmdline, err := os.ReadFile(cmdlinePath(pid)); err == nil && !bytes.Contains(cmdline, jobMarker) {
 		return 0
 	}
 	return pid
+}
+
+// jobMarker is in the command line of every job.
+var jobMarker = []byte("--progress\x00json")
+
+func cmdlinePath(pid int) string { return fmt.Sprintf("/proc/%d/cmdline", pid) }
+
+// waitVisible waits up to a second until the command line of the just started
+// process pid shows that it is a job. Go starts processes with vfork, and the
+// kernel resumes the parent during execve, before it sets the new command line,
+// so for a moment PID would not recognize the job.
+func waitVisible(pid int) {
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		cmdline, err := os.ReadFile(cmdlinePath(pid))
+		if err != nil || bytes.Contains(cmdline, jobMarker) {
+			return
+		}
+	}
 }
 
 // Signal sends sig to the running job, if any.
