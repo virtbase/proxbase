@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 # Base images are pinned by digest; Renovate updates them.
-FROM --platform=$BUILDPLATFORM golang:1.27-trixie@sha256:fbb7ae40b62ff8afe31662df570d39b4f5052ac32b90dae8e60d7657a20a74f4 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-trixie@sha256:c65ecfe613b539ac74c62a4c3b2c27e8f8a6076384c8f27e8a3c0f3be17cc385 AS build
 ARG TARGETOS TARGETARCH VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -ldflags "-s -w -X github.com/virtbase/proxbase/internal/cli.version=${VERSION}" \
     -o /out/proxbase ./cmd/proxbase
 
-FROM debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 # Extra apt options for difficult networks, e.g. --build-arg APT_OPTS="-o Acquire::ForceIPv4=true"
 ARG APT_OPTS=""
 # upgrade: security fixes released after the base image
