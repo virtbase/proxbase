@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1](https://github.com/virtbase/proxbase/compare/v0.4.0...v0.4.1) (2026-11-09)
+
+
+### Dependencies
+
+* **deps:** update container images ([#41](https://github.com/virtbase/proxbase/issues/41)) ([4746262](https://github.com/virtbase/proxbase/commit/4746262ab050a57eab0831d1d2a5e16a11ab3d1e))
+* **deps:** update container images ([#44](https://github.com/virtbase/proxbase/issues/44)) ([efbe285](https://github.com/virtbase/proxbase/commit/efbe2851e2e4823a07fa37558e7180c3a6367f9b))
+* **deps:** update go modules ([#45](https://github.com/virtbase/proxbase/issues/45)) ([a12356b](https://github.com/virtbase/proxbase/commit/a12356bd3feacb56370517fc7c7d9a2bd0c8bd20))
+
 ## [0.4.0](https://github.com/virtbase/proxbase/compare/v0.3.0...v0.4.0) (2026-10-22)
 
 
