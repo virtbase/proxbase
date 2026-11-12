@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2](https://github.com/virtbase/proxbase/compare/v0.4.1...v0.4.2) (2026-11-12)
+
+
+### Dependencies
+
+* **deps:** update golang:1.27-trixie docker digest to c47c3fd ([#46](https://github.com/virtbase/proxbase/issues/46)) ([1dfc5fd](https://github.com/virtbase/proxbase/commit/1dfc5fd958a3baa4f3df7cd0485e2cf3c8a44499))
+* **deps:** update module golang.org/x/crypto to v0.59.0 ([#48](https://github.com/virtbase/proxbase/issues/48)) ([8644d9a](https://github.com/virtbase/proxbase/commit/8644d9a81b4c859005c566f789628d6917b406b6))
+
 ## [0.4.1](https://github.com/virtbase/proxbase/compare/v0.4.0...v0.4.1) (2026-11-09)
 
 
